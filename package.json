@@ -1,0 +1,18 @@
+{
+  "name": "utm-desk-nosql-cloud",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=@utm-desk/api\" \"npm run dev --workspace=@utm-desk/web\"",
+    "dev:api": "npm run dev --workspace=@utm-desk/api",
+    "dev:web": "npm run dev --workspace=@utm-desk/web",
+    "start": "npm run start --workspace=@utm-desk/api",
+    "build": "npm run build --workspace=@utm-desk/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
