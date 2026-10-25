@@ -48,7 +48,7 @@ function App() {
 
   // Estado de Autenticación
   const [usuarioActual, setUsuarioActual] = useState(() => {
-    const guardado = localStorage.getItem('utm_desk_user');
+    const guardado = localStorage.getItem('utm_desk_user') || sessionStorage.getItem('utm_desk_user');
     if (guardado) {
       try {
         return JSON.parse(guardado);
@@ -58,6 +58,7 @@ function App() {
     }
     return null;
   });
+  const [recordarSesion, setRecordarSesion] = useState(() => Boolean(localStorage.getItem('utm_desk_user')));
 
   // Vistas
   // Si no está logueado: 'home' | 'login'
@@ -81,12 +82,12 @@ function App() {
   }, [usuarios]);
 
   useEffect(() => {
-    if (usuarioActual) {
-      localStorage.setItem('utm_desk_user', JSON.stringify(usuarioActual));
-    } else {
-      localStorage.removeItem('utm_desk_user');
-    }
-  }, [usuarioActual]);
+    const storage = recordarSesion ? localStorage : sessionStorage;
+    const otherStorage = recordarSesion ? sessionStorage : localStorage;
+    if (usuarioActual) storage.setItem('utm_desk_user', JSON.stringify(usuarioActual));
+    else storage.removeItem('utm_desk_user');
+    otherStorage.removeItem('utm_desk_user');
+  }, [usuarioActual, recordarSesion]);
 
   const addToast = (mensaje, tipo = 'info') => {
     const id = Date.now() + Math.random();
@@ -96,13 +97,21 @@ function App() {
     }, 3800);
   };
 
-  const handleLoginSuccess = (user) => {
-    setUsuarioActual(user);
+  const handleLoginSuccess = (user, token, recordar = true) => {
+    const normalizedUser = { ...user, id: user.id || user._id, areaAsignada: user.areas_autorizadas?.[0] };
+    const storage = recordar ? localStorage : sessionStorage;
+    const otherStorage = recordar ? sessionStorage : localStorage;
+    storage.setItem('utm_desk_token', token);
+    otherStorage.removeItem('utm_desk_token');
+    setRecordarSesion(recordar);
+    setUsuarioActual(normalizedUser);
     setVistaAutenticada('dashboard');
   };
 
   const handleLogout = () => {
     setUsuarioActual(null);
+    localStorage.removeItem('utm_desk_token');
+    sessionStorage.removeItem('utm_desk_token');
     setVistaPublica('home');
     addToast('Sesión cerrada correctamente', 'info');
   };
