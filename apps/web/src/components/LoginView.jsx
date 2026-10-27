@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import Icon from './Icons';
 import { login } from '../lib/api';
 
-const DEMO_PASSWORD = 'seguraUTM2026';
 const DEMO_ACCOUNTS = [
   { nombre: 'Ana Sofía García Mendoza', rol: 'Reportante', correo: 'alumno.garcia@utm.edu.mx', iniciales: 'AG', color: 'bg-blue-100 text-blue-700' },
   { nombre: 'Ing. Roberto Juárez Pérez', rol: 'Técnico · Redes', correo: 'ing.roberto.juarez@utm.edu.mx', iniciales: 'RJ', color: 'bg-cyan-100 text-cyan-700' },
@@ -51,8 +50,8 @@ export default function LoginView({ onLoginSuccess, onBackToHome, addToast }) {
 
   const oneClickLogin = (account) => {
     setCorreo(account.correo);
-    setContrasena(DEMO_PASSWORD);
-    submitLogin(account.correo, DEMO_PASSWORD);
+    setContrasena('');
+    setError('');
   };
 
   return (

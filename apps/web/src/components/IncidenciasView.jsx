@@ -60,7 +60,7 @@ export default function IncidenciasView({ tickets, onVerDetalle, onNuevaIncidenc
         <div>
           <h2>Explorador Institucional de Incidencias</h2>
           <p>
-            Consulta, busca y filtra todos los tickets registrados en la Universidad Tecnológica de la Mixteca.
+            Consulta, busca y filtra todos los tickets registrados en la Universidad Tecnológica Metropolitana.
           </p>
         </div>
         <button className="btn-primary-glow" onClick={onNuevaIncidencia}>

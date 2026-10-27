@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const { Ticket, ESTADOS } = require('../models/Ticket');
+const { User } = require('../models/User');
 const { requireAuth, allowRoles } = require('../middleware/auth');
 const { validateTicketInput } = require('../utils/ticketRules');
 
@@ -10,7 +11,7 @@ function ticketCode() {
   return `INC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000000)).padStart(6, '0')}`;
 }
 
-router.post('/', requireAuth, async (req, res, next) => {
+router.post('/', requireAuth, allowRoles('reportante'), async (req, res, next) => {
   try {
     const errors = validateTicketInput(req.body);
     if (errors.length) return res.status(400).json({ error: 'Validación fallida', details: errors });
@@ -35,14 +36,21 @@ router.get('/', requireAuth, async (req, res, next) => {
     if (req.user.rol === 'reportante') filter['reportante.usuario_id'] = req.user._id;
     if (req.user.rol === 'tecnico') filter['asignacion.tecnico_id'] = req.user._id;
     if (req.user.rol === 'coordinador') filter['asignacion.area'] = { $in: req.user.areas_autorizadas };
-    const tickets = await Ticket.find(filter).sort({ fecha_creacion: -1 }).limit(100);
+    const tickets = await Ticket.find(filter)
+      .populate('reportante.usuario_id', 'nombre correo')
+      .populate('asignacion.tecnico_id', 'nombre correo')
+      .populate('historial_seguimiento.actor_id', 'nombre')
+      .sort({ fecha_creacion: -1 }).limit(100);
     res.json(tickets);
   } catch (error) { next(error); }
 });
 
 router.get('/:id', requireAuth, async (req, res, next) => {
   try {
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.params.id)
+      .populate('reportante.usuario_id', 'nombre correo')
+      .populate('asignacion.tecnico_id', 'nombre correo')
+      .populate('historial_seguimiento.actor_id', 'nombre');
     if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
     const owner = ticket.reportante.usuario_id.equals(req.user._id);
     const technician = ticket.asignacion.tecnico_id?.equals(req.user._id);
@@ -61,10 +69,16 @@ router.patch('/:id/asignacion', requireAuth, allowRoles('coordinador', 'administ
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
     if (req.user.rol === 'coordinador' && !req.user.areas_autorizadas.includes(ticket.asignacion.area)) return res.status(403).json({ error: 'Área no autorizada' });
+    const tecnico = await User.findOne({ _id: tecnico_id, rol: 'tecnico', activo: true });
+    if (!tecnico) return res.status(400).json({ error: 'El técnico seleccionado no está disponible' });
+    if (!tecnico.areas_autorizadas.includes(ticket.asignacion.area)) return res.status(400).json({ error: 'El técnico no está autorizado para el área del ticket' });
     if (prioridad) ticket.prioridad = prioridad;
     ticket.asignacion.tecnico_id = tecnico_id;
     ticket.historial_seguimiento.push({ actor_id: req.user._id, accion: 'asignacion', estado_anterior: ticket.estado, estado_nuevo: ticket.estado, comentario });
     await ticket.save();
+    await ticket.populate('reportante.usuario_id', 'nombre correo');
+    await ticket.populate('asignacion.tecnico_id', 'nombre correo');
+    await ticket.populate('historial_seguimiento.actor_id', 'nombre');
     res.json(ticket);
   } catch (error) { next(error); }
 });
@@ -86,6 +100,9 @@ router.patch('/:id/estado', requireAuth, allowRoles('tecnico', 'coordinador', 'a
     ticket.horas_invertidas += Number(horas_agregadas) || 0;
     ticket.historial_seguimiento.push({ actor_id: req.user._id, accion: 'cambio_estado', estado_anterior: previous, estado_nuevo: estado, comentario, horas_agregadas });
     await ticket.save();
+    await ticket.populate('reportante.usuario_id', 'nombre correo');
+    await ticket.populate('asignacion.tecnico_id', 'nombre correo');
+    await ticket.populate('historial_seguimiento.actor_id', 'nombre');
     res.json(ticket);
   } catch (error) { next(error); }
 });

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Icon from './Icons';
 import { CATEGORIAS_CONFIG } from '../mockData';
+import { updateTicketStatus } from '../lib/api';
 
 export default function DetalleTicketModal({ ticket, user, onClose, onActualizarTicket, addToast }) {
   const [nuevoComentario, setNuevoComentario] = useState('');
@@ -11,38 +12,26 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
 
   const areaConfig = CATEGORIAS_CONFIG[ticket.categoria];
 
-  const handleAgregarComentario = (e) => {
+  const handleAgregarComentario = async (e) => {
     e.preventDefault();
     if (!nuevoComentario.trim()) {
       alert('Por favor escribe un comentario o nota de seguimiento.');
       return;
     }
 
-    const horasNum = parseFloat(horasExtra) || 0;
-    const nuevoHistorialItem = {
-      id: `h-${Date.now()}`,
-      fecha: new Date().toISOString(),
-      actor: `${user.nombre} (${user.rol.toUpperCase()})`,
-      accion: user.rol === 'tecnico' ? 'Nota técnica de seguimiento' : 'Comentario en expediente',
-      estadoAnterior: ticket.estado,
-      estadoNuevo: cambiarEstado,
-      comentario: nuevoComentario.trim(),
-      horas: horasNum
-    };
-
-    const ticketActualizado = {
-      ...ticket,
-      estado: cambiarEstado,
-      horas_invertidas: (ticket.horas_invertidas || 0) + horasNum,
-      fecha_actualizacion: new Date().toISOString(),
-      fecha_resolucion: cambiarEstado === 'resuelta' && !ticket.fecha_resolucion ? new Date().toISOString() : ticket.fecha_resolucion,
-      historial: [...ticket.historial, nuevoHistorialItem]
-    };
-
-    onActualizarTicket(ticketActualizado);
-    addToast('Nota registrada y expediente actualizado en MongoDB Atlas', 'success');
-    setNuevoComentario('');
-    setHorasExtra('0');
+    try {
+      const ticketActualizado = await updateTicketStatus(ticket.id, {
+        estado: cambiarEstado,
+        comentario: nuevoComentario.trim(),
+        horas_agregadas: parseFloat(horasExtra) || 0
+      });
+      onActualizarTicket(ticketActualizado);
+      addToast('Nota registrada y expediente actualizado en MongoDB Atlas', 'success');
+      setNuevoComentario('');
+      setHorasExtra('0');
+    } catch (error) {
+      addToast(`No fue posible actualizar el expediente: ${error.message}`, 'error');
+    }
   };
 
   return (
@@ -223,7 +212,7 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
             </div>
 
             {/* Formulario Interactivo para Agregar Nota o Avance */}
-            <div className="exp-section-card add-note-card">
+            {['tecnico', 'coordinador', 'administrador'].includes(user.rol) && <div className="exp-section-card add-note-card">
               <h4>Agregar Nota de Seguimiento al Expediente</h4>
               <p className="sub-hint">Esta acción se registrará con tu firma institucional: <b>{user.nombre}</b>.</p>
 
@@ -276,7 +265,7 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
                   </button>
                 </div>
               </form>
-            </div>
+            </div>}
           </div>
 
           {/* Columna Derecha: Tarjeta de Metadatos y Evidencias */}

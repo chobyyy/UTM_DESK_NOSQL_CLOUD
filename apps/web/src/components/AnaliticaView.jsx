@@ -1,15 +1,35 @@
 import React from 'react';
 import Icon from './Icons';
-import { ESTADISTICAS_CAMPUS, CATEGORIAS_CONFIG } from '../mockData';
+import { CATEGORIAS_CONFIG } from '../mockData';
 
 export default function AnaliticaView({ tickets, onVolver }) {
-  const stats = ESTADISTICAS_CAMPUS;
+  // Metricas derivadas de MongoDB (tickets)
 
   // Calcular métricas en vivo basadas en la lista actual de tickets
   const total = tickets.length;
   const abiertas = tickets.filter((t) => t.estado === 'abierta').length;
-  const enProceso = tickets.filter((t) => t.estado === 'en_proceso' || t.estado === 'en_espera').length;
+  const enProceso = tickets.filter((t) => t.estado === 'en_proceso').length;
+  const enEspera = tickets.filter((t) => t.estado === 'en_espera').length;
   const resueltas = tickets.filter((t) => t.estado === 'resuelta' || t.estado === 'cerrada').length;
+
+  const tituloCounts = tickets.reduce((acc, t) => {
+    const titulo = t.titulo || 'Sin titulo';
+    acc[titulo] = (acc[titulo] || 0) + 1;
+    return acc;
+  }, {});
+  const topProblemas = Object.entries(tituloCounts)
+    .map(([titulo, ocurrencias]) => ({ titulo, ocurrencias }))
+    .sort((a, b) => b.ocurrencias - a.ocurrencias)
+    .slice(0, 5);
+
+  const edificioCounts = tickets.reduce((acc, t) => {
+    const nombre = t.ubicacion?.edificio || 'Sin edificio';
+    acc[nombre] = (acc[nombre] || 0) + 1;
+    return acc;
+  }, {});
+  const porEdificio = Object.entries(edificioCounts)
+    .map(([nombre, cantidad]) => ({ nombre, cantidad }))
+    .sort((a, b) => b.cantidad - a.cantidad);
 
   const computoCount = tickets.filter((t) => t.categoria === 'computo_redes').length;
   const infraCount = tickets.filter((t) => t.categoria === 'infraestructura').length;
@@ -31,7 +51,7 @@ export default function AnaliticaView({ tickets, onVolver }) {
           <h2>Métricas y Analítica Operativa del Campus UTM</h2>
           <p>
             Monitoreo en tiempo real de tiempos de respuesta, incidencias recurrentes y demanda de servicios
-            en los edificios de la Universidad Tecnológica de la Mixteca.
+            en los edificios de la Universidad Tecnológica Metropolitana.
           </p>
         </div>
         <div className="atlas-sync-badge">
@@ -59,7 +79,7 @@ export default function AnaliticaView({ tickets, onVolver }) {
           </div>
           <div className="kpi-body">
             <span className="kpi-title">Tiempo Medio de Respuesta</span>
-            <b className="kpi-number">{stats.totales.tiempoPromedioResolucion}</b>
+            <b className="kpi-number">Sin datos</b>
             <small className="kpi-sub">-15% respecto al semestre anterior</small>
           </div>
         </div>
@@ -70,7 +90,7 @@ export default function AnaliticaView({ tickets, onVolver }) {
           </div>
           <div className="kpi-body">
             <span className="kpi-title">Cumplimiento de SLA</span>
-            <b className="kpi-number">{stats.totales.cumplimientoSLA}</b>
+            <b className="kpi-number">Sin datos</b>
             <small className="kpi-sub">Atención dentro del plazo oficial</small>
           </div>
         </div>
@@ -81,7 +101,7 @@ export default function AnaliticaView({ tickets, onVolver }) {
           </div>
           <div className="kpi-body">
             <span className="kpi-title">Índice de Satisfacción</span>
-            <b className="kpi-number">{stats.totales.satisfaccionUsuarios}</b>
+            <b className="kpi-number">Sin datos</b>
             <small className="kpi-sub">Evaluación de docentes y alumnos</small>
           </div>
         </div>
@@ -156,9 +176,13 @@ export default function AnaliticaView({ tickets, onVolver }) {
           </div>
 
           <div className="edificios-ranking-list">
-            {stats.porEdificio.map((ed, idx) => {
-              const maxVal = stats.porEdificio[0].cantidad;
+            {porEdificio.length === 0 && (
+              <p className="dash-card-subtitle">Sin datos</p>
+            )}
+            {porEdificio.map((ed, idx) => {
+              const maxVal = porEdificio[0].cantidad || 1;
               const porcentaje = (ed.cantidad / maxVal) * 100;
+              const colors = ['#2563eb', '#0284c7', '#0d9488', '#10b981', '#6366f1', '#8b5cf6'];
               return (
                 <div key={idx} className="edificio-rank-item">
                   <div className="rank-badge">{idx + 1}</div>
@@ -168,7 +192,7 @@ export default function AnaliticaView({ tickets, onVolver }) {
                       <span>{ed.cantidad} incidencias</span>
                     </div>
                     <div className="bar-track-sm">
-                      <div className="bar-fill" style={{ width: `${porcentaje}%`, background: ed.color }}></div>
+                      <div className="bar-fill" style={{ width: `${porcentaje}%`, background: colors[idx % colors.length] }}></div>
                     </div>
                   </div>
                 </div>
@@ -190,15 +214,18 @@ export default function AnaliticaView({ tickets, onVolver }) {
         </div>
 
         <div className="top-problemas-grid">
-          {stats.topProblemas.map((prob, idx) => (
+          {topProblemas.length === 0 && (
+            <p className="dash-card-subtitle">Sin datos</p>
+          )}
+          {topProblemas.map((prob, idx) => (
             <div key={idx} className="top-prob-card">
               <div className="top-prob-num">#{idx + 1}</div>
               <div className="top-prob-content">
-                <span className="top-prob-cat">{prob.categoria}</span>
+                <span className="top-prob-cat">Incidencias</span>
                 <h4>{prob.titulo}</h4>
                 <div className="top-prob-footer">
                   <span className="top-prob-count"><b>{prob.ocurrencias}</b> reportes registrados</span>
-                  <span className="top-prob-action">Protocolo Preventivo Activo</span>
+                  <span className="top-prob-action">Datos reales de MongoDB</span>
                 </div>
               </div>
             </div>

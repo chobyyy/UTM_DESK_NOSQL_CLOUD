@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Icon from './Icons';
 import { CATEGORIAS_CONFIG, EDIFICIOS_UTM } from '../mockData';
+import { createTicket } from '../lib/api';
 
 export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, addToast }) {
   const [categoria, setCategoria] = useState('computo_redes');
@@ -37,6 +38,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
 
   // Evidencias simuladas
   const [archivosSimulados, setArchivosSimulados] = useState([]);
+  const [guardando, setGuardando] = useState(false);
 
   const handleSimularArchivo = () => {
     const nombres = ['foto_evidencia_1.jpg', 'captura_error_pantalla.png', 'registro_evento.log'];
@@ -67,7 +69,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
     setPaso(3);
   };
 
-  const handleFinalizarSubmit = (e) => {
+  const handleFinalizarSubmit = async (e) => {
     e.preventDefault();
 
     // Construir detalle_especifico NoSQL según la categoría
@@ -99,57 +101,33 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
       };
     }
 
-    const nuevoCodigo = `INC-2026-${String(Math.floor(1000 + Math.random() * 9000))}`;
-
     const tagsArray = tags
       ? tags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)
       : [categoria.replace('_', '')];
 
     const nuevoTicket = {
-      id: `t-${Date.now()}`,
-      codigo: nuevoCodigo,
       titulo: titulo.trim(),
       descripcion: descripcion.trim(),
       categoria,
       prioridad,
       estado: 'abierta',
-      reportante: {
-        id: user.id,
-        nombre: user.nombre,
-        correo: user.correo
-      },
       ubicacion: {
         edificio,
         espacio: espacio.trim()
       },
-      asignacion: {
-        area: categoria,
-        tecnicoId: null,
-        tecnicoNombre: 'Sin asignar'
-      },
       detalle_especifico: detalleEspecifico,
       tags: tagsArray,
-      horas_invertidas: 0,
-      fecha_creacion: new Date().toISOString(),
-      fecha_actualizacion: new Date().toISOString(),
-      fecha_resolucion: null,
-      evidencias: archivosSimulados,
-      historial: [
-        {
-          id: `h-${Date.now()}`,
-          fecha: new Date().toISOString(),
-          actor: `${user.nombre} (${user.rol.toUpperCase()})`,
-          accion: 'Registro de incidencia en el portal',
-          estadoAnterior: null,
-          estadoNuevo: 'abierta',
-          comentario: 'Se recibió la solicitud digital. Pendiente de asignación por coordinación.',
-          horas: 0
-        }
-      ]
     };
-
-    onTicketCreado(nuevoTicket);
-    addToast(`¡Incidencia ${nuevoCodigo} creada con éxito!`, 'success');
+    try {
+      setGuardando(true);
+      const ticketCreado = await createTicket(nuevoTicket);
+      onTicketCreado(ticketCreado);
+      addToast(`¡Incidencia ${ticketCreado.codigo} creada con éxito!`, 'success');
+    } catch (error) {
+      addToast(`No fue posible registrar la incidencia: ${error.message}`, 'error');
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const areaConfig = CATEGORIAS_CONFIG[categoria];
@@ -606,9 +584,9 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
                 <Icon name="arrow-left" size={16} />
                 <span>Anterior</span>
               </button>
-              <button type="submit" className="btn-primary-glow">
+              <button type="submit" className="btn-primary-glow" disabled={guardando}>
                 <Icon name="check" size={18} />
-                <span>Registrar Incidencia Oficial</span>
+                <span>{guardando ? 'Registrando…' : 'Registrar Incidencia Oficial'}</span>
               </button>
             </div>
           </form>

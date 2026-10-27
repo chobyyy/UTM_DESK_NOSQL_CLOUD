@@ -1,81 +1,78 @@
-import { USUARIOS_DEMO } from '../mockData';
-
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
-function localMockLogin(cleanEmail) {
-  let usuarios = [];
-  try {
-    const guardados = localStorage.getItem('utm_desk_usuarios');
-    usuarios = guardados ? JSON.parse(guardados) : USUARIOS_DEMO;
-  } catch {
-    usuarios = USUARIOS_DEMO;
-  }
+function token() {
+  return localStorage.getItem('utm_desk_token') || sessionStorage.getItem('utm_desk_token');
+}
 
-  // Buscar usuario existente
-  let user = usuarios.find((u) => u.correo?.toLowerCase() === cleanEmail);
-
-  // Si no existe, crear cuenta automáticamente para permitir acceso con cualquier correo
-  if (!user) {
-    const usernamePart = cleanEmail.split('@')[0];
-    const nombreFormateado = usernamePart.charAt(0).toUpperCase() + usernamePart.slice(1);
-    const iniciales = (usernamePart.slice(0, 2) || 'US').toUpperCase();
-
-    user = {
-      id: `usr-${Date.now()}`,
-      nombre: nombreFormateado,
-      correo: cleanEmail,
-      rol: 'reportante',
-      matricula: `EXT-${Math.floor(100000 + Math.random() * 900000)}`,
-      carrera: 'Usuario General',
-      avatar: iniciales,
-      activo: true
-    };
-
-    usuarios.push(user);
-    try {
-      localStorage.setItem('utm_desk_usuarios', JSON.stringify(usuarios));
-    } catch {
-      // Continuar si quota de storage está restringida
+async function request(path, options = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
+      ...options.headers
     }
-  }
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'No fue posible completar la solicitud.');
+  return body;
+}
 
-  const mockToken = `mock-token-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  return { token: mockToken, user, isMock: true };
+function toUiTicket(ticket) {
+  const reportante = ticket.reportante?.usuario_id;
+  const tecnico = ticket.asignacion?.tecnico_id;
+  return {
+    ...ticket,
+    id: ticket._id,
+    reportante: {
+      ...ticket.reportante,
+      id: reportante?._id || ticket.reportante?.usuario_id,
+      nombre: reportante?.nombre || ticket.reportante?.nombre,
+      correo: reportante?.correo || ''
+    },
+    asignacion: {
+      ...ticket.asignacion,
+      tecnicoId: tecnico?._id || ticket.asignacion?.tecnico_id || null,
+      tecnicoNombre: tecnico?.nombre || 'Sin asignar'
+    },
+    historial: (ticket.historial_seguimiento || []).map((item, index) => ({
+      id: `${ticket._id}-${index}`,
+      fecha: item.fecha,
+      accion: item.accion,
+      comentario: item.comentario,
+      estadoNuevo: item.estado_nuevo,
+      estadoAnterior: item.estado_anterior,
+      horas: item.horas_agregadas || 0,
+      actor: item.actor_id?.nombre || 'Usuario institucional'
+    })),
+    evidencias: ticket.evidencias_adjuntas || []
+  };
 }
 
 export async function login(correo, contrasena) {
-  const cleanEmail = correo?.trim().toLowerCase();
-  try {
-    const response = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ correo: cleanEmail, contrasena })
-    });
+  return request('/auth/login', { method: 'POST', body: JSON.stringify({ correo: correo.trim().toLowerCase(), contrasena }) });
+}
 
-    // Si el proxy de Vite o el backend responde con error de conexión (500 de proxy / 502 / 503)
-    if (response.status >= 500) {
-      const body = await response.json().catch(() => null);
-      if (body && body.error && !body.error.toLowerCase().includes('proxy')) {
-        throw new Error(body.error);
-      }
-      // Servidor backend apagado: fallback transparente al modo prototipo/local
-      return localMockLogin(cleanEmail);
-    }
+export async function listTickets() {
+  return (await request('/tickets')).map(toUiTicket);
+}
 
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(body.error || 'Correo o contraseña incorrectos.');
-    }
-    return body;
-  } catch (error) {
-    // Si la llamada fetch falla directamente (ej. backend no iniciado, error de red)
-    if (
-      error.message === 'Failed to fetch' ||
-      error.message.includes('fetch') ||
-      error.message.includes('NetworkError')
-    ) {
-      return localMockLogin(cleanEmail);
-    }
-    throw error;
-  }
+export async function createTicket(data) {
+  return toUiTicket(await request('/tickets', { method: 'POST', body: JSON.stringify(data) }));
+}
+
+export async function updateTicketStatus(id, data) {
+  return toUiTicket(await request(`/tickets/${id}/estado`, { method: 'PATCH', body: JSON.stringify(data) }));
+}
+
+export async function assignTicket(id, data) {
+  return toUiTicket(await request(`/tickets/${id}/asignacion`, { method: 'PATCH', body: JSON.stringify(data) }));
+}
+
+export async function listTechnicians() {
+  return (await request('/users/tecnicos')).map((user) => ({ ...user, id: user._id }));
+}
+
+export async function listUsers() {
+  return (await request('/users')).map((user) => ({ ...user, id: user._id }));
 }

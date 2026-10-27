@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Icon from './Icons';
-import { CATEGORIAS_CONFIG, USUARIOS_DEMO } from '../mockData';
+import { CATEGORIAS_CONFIG } from '../mockData';
+import { assignTicket, listTechnicians } from '../lib/api';
 
 export default function DashboardCoordinador({ user, tickets, onActualizarTicket, onVerDetalle, addToast }) {
   const areaKey = user.areaAsignada || 'computo_redes';
@@ -14,7 +15,11 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
   const [filtroEstado, setFiltroEstado] = useState('todos');
 
   // Técnicos registrados
-  const listaTecnicos = USUARIOS_DEMO.filter((u) => u.rol === 'tecnico');
+  const [listaTecnicos, setListaTecnicos] = useState([]);
+
+  useEffect(() => {
+    listTechnicians().then(setListaTecnicos).catch((error) => addToast(`No fue posible cargar técnicos: ${error.message}`, 'error'));
+  }, []);
 
   // Tickets pertenecientes al área supervisada (o todas si cambia filtro)
   const ticketsArea = tickets.filter((t) => (filtroArea === 'todas' ? true : t.categoria === filtroArea));
@@ -38,7 +43,7 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
     setComentarioAsignacion(`Asignado por Coordinación de ${areaConfig.nombre}`);
   };
 
-  const guardarAsignacion = (e) => {
+  const guardarAsignacion = async (e) => {
     e.preventDefault();
     const tecnicoObj = listaTecnicos.find((u) => u.id === tecnicoSeleccionado);
     if (!tecnicoObj) {
@@ -46,34 +51,18 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
       return;
     }
 
-    const ticketActualizado = {
-      ...ticketParaAsignar,
-      prioridad: prioridadSeleccionada,
-      estado: ticketParaAsignar.estado === 'abierta' ? 'en_proceso' : ticketParaAsignar.estado,
-      asignacion: {
-        ...ticketParaAsignar.asignacion,
-        tecnicoId: tecnicoObj.id,
-        tecnicoNombre: tecnicoObj.nombre
-      },
-      fecha_actualizacion: new Date().toISOString(),
-      historial: [
-        ...ticketParaAsignar.historial,
-        {
-          id: `h-${Date.now()}`,
-          fecha: new Date().toISOString(),
-          actor: `${user.nombre} (Coordinación)`,
-          accion: 'Asignación / Reasignación formal',
-          estadoAnterior: ticketParaAsignar.estado,
-          estadoNuevo: ticketParaAsignar.estado === 'abierta' ? 'en_proceso' : ticketParaAsignar.estado,
-          comentario: `${comentarioAsignacion} -> Asignado a ${tecnicoObj.nombre} con prioridad ${prioridadSeleccionada.toUpperCase()}`,
-          horas: 0
-        }
-      ]
-    };
-
-    onActualizarTicket(ticketActualizado);
-    addToast(`Ticket ${ticketParaAsignar.codigo} asignado a ${tecnicoObj.nombre}`, 'success');
-    setTicketParaAsignar(null);
+    try {
+      const ticketActualizado = await assignTicket(ticketParaAsignar.id, {
+        tecnico_id: tecnicoObj.id,
+        prioridad: prioridadSeleccionada,
+        comentario: comentarioAsignacion
+      });
+      onActualizarTicket(ticketActualizado);
+      addToast(`Ticket ${ticketParaAsignar.codigo} asignado a ${tecnicoObj.nombre}`, 'success');
+      setTicketParaAsignar(null);
+    } catch (error) {
+      addToast(`No fue posible asignar el ticket: ${error.message}`, 'error');
+    }
   };
 
   return (
