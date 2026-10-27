@@ -8,6 +8,9 @@ const userSchema = new mongoose.Schema(
     correo: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true, select: false },
     rol: { type: String, enum: ROLES, default: 'reportante', index: true },
+    matricula: { type: String, trim: true },
+    carrera: { type: String, trim: true },
+    avatar: { type: String, trim: true },
     areas_autorizadas: [{ type: String, trim: true }],
     activo: { type: Boolean, default: true }
   },

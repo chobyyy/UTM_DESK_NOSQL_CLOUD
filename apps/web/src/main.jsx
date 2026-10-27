@@ -105,6 +105,17 @@ function App() {
     otherStorage.removeItem('utm_desk_token');
     setRecordarSesion(recordar);
     setUsuarioActual(normalizedUser);
+    setUsuarios((prev) => {
+      const existe = prev.some(
+        (u) => (u.correo && u.correo.toLowerCase() === normalizedUser.correo?.toLowerCase()) || u.id === normalizedUser.id
+      );
+      if (existe) return prev;
+      const actualizados = [...prev, normalizedUser];
+      try {
+        localStorage.setItem('utm_desk_usuarios', JSON.stringify(actualizados));
+      } catch {}
+      return actualizados;
+    });
     setVistaAutenticada('dashboard');
   };
 
