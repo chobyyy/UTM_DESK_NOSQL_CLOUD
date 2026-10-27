@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Icon from './Icons';
 import { CATEGORIAS_CONFIG } from '../mockData';
+import { updateTicketStatus } from '../lib/api';
 
 export default function DashboardTecnico({ user, tickets, onActualizarTicket, onVerDetalle, addToast }) {
   const [ticketParaEditar, setTicketParaEditar] = useState(null);
@@ -32,38 +33,25 @@ export default function DashboardTecnico({ user, tickets, onActualizarTicket, on
     setNotaTecnica('');
   };
 
-  const guardarAvance = (e) => {
+  const guardarAvance = async (e) => {
     e.preventDefault();
     if (!notaTecnica.trim()) {
       alert('Por favor agrega una nota técnica sobre las acciones realizadas.');
       return;
     }
 
-    const horasNum = parseFloat(horasNuevas) || 0;
-    const ticketActualizado = {
-      ...ticketParaEditar,
-      estado: nuevoEstado,
-      horas_invertidas: (ticketParaEditar.horas_invertidas || 0) + horasNum,
-      fecha_actualizacion: new Date().toISOString(),
-      fecha_resolucion: nuevoEstado === 'resuelta' ? new Date().toISOString() : ticketParaEditar.fecha_resolucion,
-      historial: [
-        ...ticketParaEditar.historial,
-        {
-          id: `h-${Date.now()}`,
-          fecha: new Date().toISOString(),
-          actor: `${user.nombre} (Técnico)`,
-          accion: nuevoEstado === 'resuelta' ? 'Resolución técnica' : 'Avance de trabajo en sitio',
-          estadoAnterior: ticketParaEditar.estado,
-          estadoNuevo: nuevoEstado,
-          comentario: notaTecnica,
-          horas: horasNum
-        }
-      ]
-    };
-
-    onActualizarTicket(ticketActualizado);
-    addToast(`Ticket ${ticketParaEditar.codigo} actualizado a ${nuevoEstado.toUpperCase()}`, 'success');
-    setTicketParaEditar(null);
+    try {
+      const ticketActualizado = await updateTicketStatus(ticketParaEditar.id, {
+        estado: nuevoEstado,
+        comentario: notaTecnica,
+        horas_agregadas: parseFloat(horasNuevas) || 0
+      });
+      onActualizarTicket(ticketActualizado);
+      addToast(`Ticket ${ticketParaEditar.codigo} actualizado a ${nuevoEstado.toUpperCase()}`, 'success');
+      setTicketParaEditar(null);
+    } catch (error) {
+      addToast(`No fue posible actualizar el ticket: ${error.message}`, 'error');
+    }
   };
 
   return (

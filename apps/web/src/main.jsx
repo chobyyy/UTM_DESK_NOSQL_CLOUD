@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 
 // Mock Data
-import { TICKETS_INICIALES, USUARIOS_DEMO, ROLES } from './mockData';
+import { ROLES } from './mockData';
+import { listTickets, listUsers } from './lib/api';
 
 // Componentes
 import HomePublico from './components/HomePublico';
@@ -20,31 +21,10 @@ import AnaliticaView from './components/AnaliticaView';
 import Icon from './components/Icons';
 
 function App() {
-  // Estado de Tickets (persistente en localStorage o mock)
-  const [tickets, setTickets] = useState(() => {
-    const guardados = localStorage.getItem('utm_desk_tickets');
-    if (guardados) {
-      try {
-        return JSON.parse(guardados);
-      } catch {
-        return TICKETS_INICIALES;
-      }
-    }
-    return TICKETS_INICIALES;
-  });
-
-  // Estado de Usuarios
-  const [usuarios, setUsuarios] = useState(() => {
-    const guardados = localStorage.getItem('utm_desk_usuarios');
-    if (guardados) {
-      try {
-        return JSON.parse(guardados);
-      } catch {
-        return USUARIOS_DEMO;
-      }
-    }
-    return USUARIOS_DEMO;
-  });
+  const [tickets, setTickets] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [cargandoUsuarios, setCargandoUsuarios] = useState(false);
+  const [errorUsuarios, setErrorUsuarios] = useState(null);
 
   // Estado de Autenticación
   const [usuarioActual, setUsuarioActual] = useState(() => {
@@ -72,15 +52,6 @@ function App() {
   // Sistema de Notificaciones Toast
   const [toasts, setToasts] = useState([]);
 
-  // Guardar en localStorage
-  useEffect(() => {
-    localStorage.setItem('utm_desk_tickets', JSON.stringify(tickets));
-  }, [tickets]);
-
-  useEffect(() => {
-    localStorage.setItem('utm_desk_usuarios', JSON.stringify(usuarios));
-  }, [usuarios]);
-
   useEffect(() => {
     const storage = recordarSesion ? localStorage : sessionStorage;
     const otherStorage = recordarSesion ? sessionStorage : localStorage;
@@ -88,6 +59,33 @@ function App() {
     else storage.removeItem('utm_desk_user');
     otherStorage.removeItem('utm_desk_user');
   }, [usuarioActual, recordarSesion]);
+
+  useEffect(() => {
+    if (!usuarioActual) {
+      setTickets([]);
+      return;
+    }
+    listTickets().then(setTickets).catch((error) => {
+      addToast(`No fue posible cargar las incidencias: ${error.message}`, 'error');
+    });
+  }, [usuarioActual?.id]);
+
+  useEffect(() => {
+    if (!usuarioActual || usuarioActual.rol !== 'administrador') {
+      setUsuarios([]);
+      setCargandoUsuarios(false);
+      setErrorUsuarios(null);
+      return;
+    }
+    setCargandoUsuarios(true);
+    setErrorUsuarios(null);
+    listUsers()
+      .then(setUsuarios)
+      .catch((error) => {
+        setErrorUsuarios(error.message);
+      })
+      .finally(() => setCargandoUsuarios(false));
+  }, [usuarioActual?.id, usuarioActual?.rol]);
 
   const addToast = (mensaje, tipo = 'info') => {
     const id = Date.now() + Math.random();
@@ -98,7 +96,8 @@ function App() {
   };
 
   const handleLoginSuccess = (user, token, recordar = true) => {
-    const normalizedUser = { ...user, id: user.id || user._id, areaAsignada: user.areas_autorizadas?.[0] };
+    const initials = user.nombre.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+    const normalizedUser = { ...user, id: user.id || user._id, areaAsignada: user.areas_autorizadas?.[0], avatar: initials };
     const storage = recordar ? localStorage : sessionStorage;
     const otherStorage = recordar ? sessionStorage : localStorage;
     storage.setItem('utm_desk_token', token);
@@ -139,10 +138,6 @@ function App() {
     if (ticketParaDetalle && ticketParaDetalle.id === ticketActualizado.id) {
       setTicketParaDetalle(ticketActualizado);
     }
-  };
-
-  const handleActualizarUsuarios = (nuevosUsuarios) => {
-    setUsuarios(nuevosUsuarios);
   };
 
   return (
@@ -186,10 +181,6 @@ function App() {
             user={usuarioActual}
             vistaActual={vistaAutenticada}
             onCambiarVista={setVistaAutenticada}
-            onCambiarUsuarioDemo={(nuevoUser) => {
-              setUsuarioActual(nuevoUser);
-              setVistaAutenticada('dashboard');
-            }}
             onLogout={handleLogout}
             onNuevaIncidencia={() => setVistaAutenticada('crear')}
             addToast={addToast}
@@ -233,7 +224,8 @@ function App() {
                     user={usuarioActual}
                     tickets={tickets}
                     usuarios={usuarios}
-                    onActualizarUsuarios={handleActualizarUsuarios}
+                    cargandoUsuarios={cargandoUsuarios}
+                    errorUsuarios={errorUsuarios}
                     onVerDetalle={(t) => setTicketParaDetalle(t)}
                     onNavigateAnalitica={() => setVistaAutenticada('analitica')}
                     addToast={addToast}

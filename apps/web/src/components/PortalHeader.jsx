@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import Icon from './Icons';
-import { USUARIOS_DEMO } from '../mockData';
 
 export default function PortalHeader({
   user,
   vistaActual,
   onCambiarVista,
-  onCambiarUsuarioDemo,
   onLogout,
   onNuevaIncidencia,
   addToast
@@ -30,7 +28,7 @@ export default function PortalHeader({
           </div>
           <div>
             <div className="portal-brand-text">UTM Desk <span className="brand-pill-sm">NoSQL</span></div>
-            <div className="portal-brand-sub">Universidad Tecnológica de la Mixteca</div>
+            <div className="portal-brand-sub">Universidad Tecnológica Metropolitana</div>
           </div>
         </div>
 
@@ -76,10 +74,10 @@ export default function PortalHeader({
 
       <div className="portal-nav-right">
         {/* Botón Nueva Incidencia */}
-        <button className="btn-nav-new-ticket" onClick={onNuevaIncidencia}>
+        {user.rol === 'reportante' && <button className="btn-nav-new-ticket" onClick={onNuevaIncidencia}>
           <Icon name="plus" size={15} />
           <span>Nueva Incidencia</span>
-        </button>
+        </button>}
 
         {/* Notificaciones */}
         <div className="nav-notif-wrapper">
@@ -117,28 +115,6 @@ export default function PortalHeader({
               </button>
             </div>
           )}
-        </div>
-
-        {/* Selector Rápido de Cambio de Rol para el Prototipo */}
-        <div className="role-switcher-box">
-          <label className="role-switcher-label">Cambiar Perfil:</label>
-          <select
-            value={user.id}
-            onChange={(e) => {
-              const u = USUARIOS_DEMO.find((usr) => usr.id === e.target.value);
-              if (u) {
-                onCambiarUsuarioDemo(u);
-                addToast(`Cambiado a perfil: ${u.nombre} (${u.rol.toUpperCase()})`, 'info');
-              }
-            }}
-            className="role-switcher-select"
-          >
-            {USUARIOS_DEMO.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.rol.toUpperCase()} - {u.nombre.split(' ')[0]} {u.nombre.split(' ')[1] || ''}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Perfil del Usuario y Logout */}

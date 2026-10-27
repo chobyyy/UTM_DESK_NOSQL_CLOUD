@@ -14,7 +14,7 @@ export default function HomePublico({ onNavigateLogin, onReportarIncidencia }) {
             </div>
             <div>
               <div className="brand-title">UTM Desk <span className="brand-pill">NoSQL Cloud</span></div>
-              <div className="brand-sub">Universidad Tecnológica de la Mixteca · Campus Inteligente</div>
+              <div className="brand-sub">Universidad Tecnológica Metropolitana · Campus Inteligente</div>
             </div>
           </div>
 
@@ -94,7 +94,7 @@ export default function HomePublico({ onNavigateLogin, onReportarIncidencia }) {
                 <span className="dot dot-amber"></span>
                 <span className="dot dot-green"></span>
               </div>
-              <span className="preview-label">UTM Desk · Monitor Operativo</span>
+              <span className="preview-label">UTM Desk · Monitor Operativo (ejemplo ilustrativo)</span>
               <span className="preview-status"><span className="pulse-green"></span> 100% Operativo</span>
             </div>
 
@@ -224,6 +224,9 @@ export default function HomePublico({ onNavigateLogin, onReportarIncidencia }) {
 
       {/* Métricas del Campus */}
       <section id="metricas" className="home-section metrics-section">
+        <p className="dash-card-subtitle" style={{ textAlign: 'center', marginBottom: '12px' }}>
+          Las cifras mostradas son ejemplos ilustrativos y no representan metricas reales del sistema.
+        </p>
         <div className="metrics-banner">
           <div className="metric-col">
             <span className="metric-big-num">1,480+</span>
@@ -305,7 +308,7 @@ export default function HomePublico({ onNavigateLogin, onReportarIncidencia }) {
               <span>UTM Desk NoSQL Cloud</span>
             </div>
             <p>
-              Universidad Tecnológica de la Mixteca · Carretera a Acatlima Km. 2.5, Huajuapan de León, Oaxaca.
+              Universidad Tecnológica Metropolitana · Carretera a Acatlima Km. 2.5, Huajuapan de León, Oaxaca.
               Dirección de Tecnologías de Información (DTI).
             </p>
           </div>
@@ -325,7 +328,7 @@ export default function HomePublico({ onNavigateLogin, onReportarIncidencia }) {
           </div>
         </div>
         <div className="footer-bottom">
-          <p>© 2026 Universidad Tecnológica de la Mixteca (UTM). Todos los derechos reservados.</p>
+          <p>© 2026 Universidad Tecnológica Metropolitana (UTM). Todos los derechos reservados.</p>
           <div className="footer-bottom-badge">
             <Icon name="shield" size={14} />
             <span>Sistema Protegido por UTM-AUTH & MongoDB Atlas</span>

@@ -6,15 +6,18 @@ const userSchema = new mongoose.Schema(
   {
     nombre: { type: String, required: true, trim: true, maxlength: 120 },
     correo: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    passwordHash: { type: String, required: true, select: false },
+    password_hash: { type: String, default: null, select: false },
     rol: { type: String, enum: ROLES, default: 'reportante', index: true },
     matricula: { type: String, trim: true },
     carrera: { type: String, trim: true },
     avatar: { type: String, trim: true },
     areas_autorizadas: [{ type: String, trim: true }],
-    activo: { type: Boolean, default: true }
+    activo: { type: Boolean, default: true },
+    tipo_reportante: { type: String, trim: true },
+    fecha_creacion: { type: Date, default: null },
+    fecha_actualizacion: { type: Date, default: null }
   },
-  { timestamps: true, collection: 'usuarios' }
+  { timestamps: false, collection: 'usuarios' }
 );
 
 module.exports = { User: mongoose.model('User', userSchema), ROLES };
