@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Icon from './Icons';
 import { CATEGORIAS_CONFIG, EDIFICIOS_UTM } from '../mockData';
 import { createTicket } from '../lib/api';
@@ -13,44 +13,33 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
   const [prioridad, setPrioridad] = useState('media');
   const [edificio, setEdificio] = useState(EDIFICIOS_UTM[0]);
   const [espacio, setEspacio] = useState('');
-  const [tags, setTags] = useState('');
 
-  // Campos Específicos Cómputo y Telecomunicaciones
-  const [computoEquipo, setComputoEquipo] = useState('');
-  const [computoInventario, setComputoInventario] = useState('');
-  const [computoIP, setComputoIP] = useState('');
-  const [computoDispositivos, setComputoDispositivos] = useState('1');
-  const [computoTipoFalla, setComputoTipoFalla] = useState('Red Wi-Fi');
 
-  // Campos Específicos Infraestructura y Mantenimiento
-  const [infraTipoDano, setInfraTipoDano] = useState('Luminaria / Eléctrico');
-  const [infraNivelRiesgo, setInfraNivelRiesgo] = useState('Moderado');
-  const [infraElemento, setInfraElemento] = useState('');
-  const [infraMateriales, setInfraMateriales] = useState('');
-  const [infraAcordonar, setInfraAcordonar] = useState(false);
-
-  // Campos Específicos Sistemas Académicos
-  const [acadPlataforma, setAcadPlataforma] = useState('Moodle LMS');
-  const [acadTipoError, setAcadTipoError] = useState('Acceso denegado / Error de credenciales');
-  const [acadCurso, setAcadCurso] = useState('');
-  const [acadPeriodo, setAcadPeriodo] = useState('2026-2 (Otoño)');
-  const [acadEstudiantesAfectados, setAcadEstudiantesAfectados] = useState('1');
-
-  // Evidencias simuladas
-  const [archivosSimulados, setArchivosSimulados] = useState([]);
+  const [fotos, setFotos] = useState([]);
+  const [leyendoFotos, setLeyendoFotos] = useState(false);
   const [guardando, setGuardando] = useState(false);
-
-  const handleSimularArchivo = () => {
-    const nombres = ['foto_evidencia_1.jpg', 'captura_error_pantalla.png', 'registro_evento.log'];
-    const elegido = nombres[Math.floor(Math.random() * nombres.length)];
-    if (!archivosSimulados.find((a) => a.nombre === elegido)) {
-      setArchivosSimulados([...archivosSimulados, { id: Date.now(), nombre: elegido, peso: '1.8 MB' }]);
-      addToast(`Archivo ${elegido} adjuntado con éxito`, 'info');
-    }
-  };
-
-  const handleEliminarArchivo = (id) => {
-    setArchivosSimulados(archivosSimulados.filter((a) => a.id !== id));
+  const selectorFotos = useRef(null);
+  const handleSeleccionarFotos = async (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (files.length + fotos.length > 3) return addToast('Puedes adjuntar hasta 3 fotos.', 'error');
+    if (files.some(file => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || !file.size || file.size > 2 * 1024 * 1024)) return addToast('Selecciona fotos JPEG, PNG o WebP de hasta 2 MB cada una.', 'error');
+    setLeyendoFotos(true);
+    try {
+      const nuevas = await Promise.all(files.map(file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('No se pudo leer la foto.'));
+        reader.onload = () => {
+          const image = new Image();
+          image.onerror = () => reject(new Error('El archivo no contiene una imagen válida.'));
+          image.onload = () => resolve({ nombre_archivo: file.name, tipo_mime: file.type, peso_kb: file.size / 1024, url_storage: reader.result });
+          image.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      })));
+      setFotos(prev => [...prev, ...nuevas]);
+    } catch (error) { addToast(error.message, 'error'); }
+    finally { setLeyendoFotos(false); }
   };
 
   const handleValidarPaso1 = () => {
@@ -72,51 +61,24 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
   const handleFinalizarSubmit = async (e) => {
     e.preventDefault();
 
-    // Construir detalle_especifico NoSQL según la categoría
-    let detalleEspecifico = {};
-
-    if (categoria === 'computo_redes') {
-      detalleEspecifico = {
-        tipo_falla: computoTipoFalla,
-        equipo: computoEquipo || 'Equipo genérico',
-        inventario: computoInventario || 'Sin inventario reportado',
-        direccion_ip: computoIP || 'DHCP Automático',
-        dispositivos_afectados: parseInt(computoDispositivos, 10) || 1
-      };
-    } else if (categoria === 'infraestructura') {
-      detalleEspecifico = {
-        tipo_dano: infraTipoDano,
-        nivel_riesgo: infraNivelRiesgo,
-        elemento_afectado: infraElemento || 'Instalación general',
-        materiales_requeridos: infraMateriales || 'Por evaluar en sitio',
-        requiere_acordonar: infraAcordonar ? 'Sí, urgente acordonar' : 'No se requiere acordonamiento'
-      };
-    } else {
-      detalleEspecifico = {
-        plataforma: acadPlataforma,
-        tipo_error: acadTipoError,
-        curso_afectado: acadCurso || 'Plataforma general',
-        periodo_escolar: acadPeriodo,
-        estudiantes_afectados: parseInt(acadEstudiantesAfectados, 10) || 1
-      };
+    if (guardando || leyendoFotos) return;
+    if (!titulo.trim() || !descripcion.trim() || !espacio.trim()) {
+      addToast('Completa el título, la descripción y la ubicación.', 'error');
+      setPaso(2);
+      return;
     }
-
-    const tagsArray = tags
-      ? tags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)
-      : [categoria.replace('_', '')];
 
     const nuevoTicket = {
       titulo: titulo.trim(),
       descripcion: descripcion.trim(),
       categoria,
       prioridad,
-      estado: 'abierta',
       ubicacion: {
         edificio,
         espacio: espacio.trim()
       },
-      detalle_especifico: detalleEspecifico,
-      tags: tagsArray,
+      detalle_especifico: {},
+      evidencias_adjuntas: fotos,
     };
     try {
       setGuardando(true);
@@ -143,8 +105,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
         <div className="create-title-box">
           <h2>Nuevo Reporte de Incidencia Universitaria</h2>
           <p>
-            Completa el formulario interactivo. El sistema adaptará los campos según el área seleccionada
-            garantizando que el equipo técnico reciba la información exacta.
+            Cuéntanos qué sucede y dónde. El equipo responsable revisará los detalles técnicos.
           </p>
         </div>
 
@@ -162,7 +123,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
           <div className="step-line"></div>
           <div className={`step-item ${paso === 3 ? 'step-active' : ''}`}>
             <div className="step-circle">3</div>
-            <span>3. Datos Específicos NoSQL</span>
+            <span>3. Fotos y confirmación</span>
           </div>
         </div>
       </div>
@@ -243,6 +204,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
                 <label>Descripción Completa del Problema *</label>
                 <textarea
                   rows={4}
+                  maxLength={5000}
                   placeholder="Describe a detalle qué sucede, desde cuándo ocurre y de qué forma perjudica a los usuarios..."
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
@@ -293,15 +255,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
                 </div>
               </div>
 
-              <div className="input-field-group">
-                <label>Etiquetas Clave (Opcional, separadas por coma)</label>
-                <input
-                  type="text"
-                  placeholder="ej. wifi, proyector, urgente, laboratorio"
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                />
-              </div>
+
             </div>
 
             <div className="wizard-footer-actions">
@@ -310,7 +264,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
                 <span>Anterior</span>
               </button>
               <button type="button" className="btn-primary" onClick={handleValidarPaso2}>
-                <span>Continuar a Campos Específicos</span>
+                <span>Continuar a Fotos y Confirmación</span>
                 <Icon name="arrow-right" size={16} />
               </button>
             </div>
@@ -324,255 +278,40 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
               <div className="area-pill-active" style={{ background: areaConfig.colorSuave, color: areaConfig.color }}>
                 {areaConfig.emoji} {areaConfig.nombre}
               </div>
-              <h3>Paso 3: Campos Específicos NoSQL y Evidencias</h3>
+              <h3>Paso 3: Fotos y confirmación</h3>
               <p>
-                Información técnica especializada según los requerimientos de <b>{areaConfig.nombre}</b>:
+                Puedes adjuntar fotos de lo que observas. No necesitas conocer datos técnicos.
               </p>
             </div>
 
-            {/* SECCIÓN DINÁMICA: CÓMPUTO Y TELECOMUNICACIONES */}
-            {categoria === 'computo_redes' && (
-              <div className="dynamic-category-panel blue-tint">
-                <div className="dynamic-panel-header">
-                  <Icon name="laptop" size={20} color="#2563eb" />
-                  <h4>Parámetros de Cómputo y Telecomunicaciones</h4>
-                </div>
-                <div className="form-grid-2">
-                  <div className="input-field-group">
-                    <label>Tipo de Falla Tecnológica *</label>
-                    <select
-                      value={computoTipoFalla}
-                      onChange={(e) => setComputoTipoFalla(e.target.value)}
-                      className="select-custom"
-                    >
-                      <option value="Red Wi-Fi">Red Wi-Fi Institucional</option>
-                      <option value="Cableado Ethernet / Switch">Cableado Ethernet / Switch</option>
-                      <option value="Hardware de PC / Servidor">Hardware de PC o Servidor</option>
-                      <option value="Proyector / Audio Aula">Proyector o Audio de Aula</option>
-                      <option value="Telefonía IP / Impresora">Telefonía IP o Impresora de Red</option>
-                    </select>
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Equipo o Dispositivo Afectado</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. PC-LAB2-14, Switch Cisco 2960"
-                      value={computoEquipo}
-                      onChange={(e) => setComputoEquipo(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Número de Inventario UTM</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. UTM-DTI-INV-2041"
-                      value={computoInventario}
-                      onChange={(e) => setComputoInventario(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Dirección IP o Segmento (Opcional)</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. 10.15.42.105"
-                      value={computoIP}
-                      onChange={(e) => setComputoIP(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Usuarios / Dispositivos Afectados Aprox.</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="500"
-                      value={computoDispositivos}
-                      onChange={(e) => setComputoDispositivos(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SECCIÓN DINÁMICA: INFRAESTRUCTURA Y MANTENIMIENTO */}
-            {categoria === 'infraestructura' && (
-              <div className="dynamic-category-panel cyan-tint">
-                <div className="dynamic-panel-header">
-                  <Icon name="wrench" size={20} color="#0284c7" />
-                  <h4>Parámetros de Infraestructura y Mantenimiento</h4>
-                </div>
-                <div className="form-grid-2">
-                  <div className="input-field-group">
-                    <label>Tipo de Daño Físico *</label>
-                    <select
-                      value={infraTipoDano}
-                      onChange={(e) => setInfraTipoDano(e.target.value)}
-                      className="select-custom"
-                    >
-                      <option value="Luminaria / Eléctrico">Luminaria / Falla Eléctrica</option>
-                      <option value="Fontanería / Fuga Hidráulica">Fontanería / Fuga Hidráulica</option>
-                      <option value="Cerrajería / Puertas / Ventanas">Cerrajería / Puertas / Ventanas</option>
-                      <option value="Climatización / Aire Acondicionado">Climatización / Aire Acondicionado</option>
-                      <option value="Estructural / Techos / Muros">Estructural / Techos / Muros</option>
-                      <option value="Mobiliario / Butacas">Mobiliario de Aula / Butacas</option>
-                    </select>
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Nivel de Riesgo para las Personas *</label>
-                    <select
-                      value={infraNivelRiesgo}
-                      onChange={(e) => setInfraNivelRiesgo(e.target.value)}
-                      className="select-custom"
-                    >
-                      <option value="Bajo">Bajo (Incomodidad leve)</option>
-                      <option value="Moderado">Moderado (Requiere atención pronta)</option>
-                      <option value="Alto">Alto (Riesgo potencial de accidente)</option>
-                      <option value="Crítico - Inmediato">Crítico (Peligro inminente de cortocircuito o colapso)</option>
-                    </select>
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Elemento Físico Afectado</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. Tubería de sanitarios, Plafón pasillo este"
-                      value={infraElemento}
-                      onChange={(e) => setInfraElemento(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Materiales o Herramientas Sugeridas</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. Foco LED 40W, Llave de paso 1/2 pulgada"
-                      value={infraMateriales}
-                      onChange={(e) => setInfraMateriales(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="input-field-group full-width">
-                    <label className="checkbox-container">
-                      <input
-                        type="checkbox"
-                        checked={infraAcordonar}
-                        onChange={(e) => setInfraAcordonar(e.target.checked)}
-                      />
-                      <span className="checkbox-text">
-                        <b>¿Se requiere acordonamiento preventivo con cinta de precaución?</b>
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SECCIÓN DINÁMICA: SISTEMAS ACADÉMICOS */}
-            {categoria === 'academico' && (
-              <div className="dynamic-category-panel teal-tint">
-                <div className="dynamic-panel-header">
-                  <Icon name="graduation" size={20} color="#0d9488" />
-                  <h4>Parámetros de Sistemas y Servicios Académicos</h4>
-                </div>
-                <div className="form-grid-2">
-                  <div className="input-field-group">
-                    <label>Plataforma o Sistema Escolar Afectado *</label>
-                    <select
-                      value={acadPlataforma}
-                      onChange={(e) => setAcadPlataforma(e.target.value)}
-                      className="select-custom"
-                    >
-                      <option value="Moodle LMS">Moodle LMS (Campus Virtual)</option>
-                      <option value="SIIA Calificaciones">SIIA (Sistema de Calificaciones y Actas)</option>
-                      <option value="Correo Institucional">Correo Institucional @utm.edu.mx</option>
-                      <option value="Biblioteca Digital">Biblioteca Digital y Repositorio</option>
-                      <option value="Portal de Alumnos">Portal Web de Alumnos</option>
-                    </select>
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Tipo de Error Detectado *</label>
-                    <select
-                      value={acadTipoError}
-                      onChange={(e) => setAcadTipoError(e.target.value)}
-                      className="select-custom"
-                    >
-                      <option value="Acceso denegado / Error de credenciales">Acceso denegado / Error de credenciales</option>
-                      <option value="Error 500 / Base de datos colapsada">Error 500 / Base de datos colapsada</option>
-                      <option value="No permite subir actas o tareas">No permite subir actas o tareas</option>
-                      <option value="Calificación o curso no visible">Calificación o curso no visible</option>
-                      <option value="Lentitud extrema del servidor">Lentitud extrema del servidor</option>
-                    </select>
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Materia, Curso o Grupo Afectado</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. Cálculo Integral - Grupo 401-A"
-                      value={acadCurso}
-                      onChange={(e) => setAcadCurso(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Periodo Escolar</label>
-                    <input
-                      type="text"
-                      value={acadPeriodo}
-                      onChange={(e) => setAcadPeriodo(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="input-field-group">
-                    <label>Estudiantes o Docentes Afectados</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="3000"
-                      value={acadEstudiantesAfectados}
-                      onChange={(e) => setAcadEstudiantesAfectados(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SECCIÓN DE EVIDENCIAS ADJUNTAS */}
             <div className="evidencias-upload-section">
               <div className="evidencias-header">
                 <div>
-                  <h4>Evidencias Fotográficas y Documentos (Opcional)</h4>
-                  <p>Adjunta fotos del daño, capturas de error o logs para acelerar el diagnóstico.</p>
+                  <h4>Evidencias fotográficas (Opcional)</h4>
+                  <p>Hasta 3 fotos JPEG, PNG o WebP de 2 MB cada una.</p>
                 </div>
-                <button type="button" className="btn-add-file" onClick={handleSimularArchivo}>
+                <input ref={selectorFotos} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={handleSeleccionarFotos} />
+                <button type="button" className="btn-add-file" disabled={guardando || leyendoFotos || fotos.length >= 3} onClick={() => selectorFotos.current.click()}>
                   <Icon name="plus" size={15} />
-                  <span>+ Simular Carga de Evidencia</span>
+                  <span>{leyendoFotos ? 'Leyendo fotos...' : 'Adjuntar fotos'}</span>
                 </button>
               </div>
-
-              {archivosSimulados.length > 0 && (
-                <div className="archivos-chips-list">
-                  {archivosSimulados.map((a) => (
-                    <div key={a.id} className="archivo-chip">
-                      <Icon name="file-text" size={15} color="#2563eb" />
-                      <span>{a.nombre} ({a.peso})</span>
-                      <button type="button" onClick={() => handleEliminarArchivo(a.id)}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="archivos-chips-list">
+                {fotos.map((foto, index) => (
+                  <div key={index} className="archivo-chip">
+                    <img src={foto.url_storage} alt={foto.nombre_archivo} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6 }} />
+                    <span>{foto.nombre_archivo} ({Math.round(foto.peso_kb)} KB)</span>
+                    <button type="button" disabled={guardando} aria-label={'Eliminar ' + foto.nombre_archivo} onClick={() => setFotos(prev => prev.filter((_, i) => i !== index))}>×</button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Resumen Final de Enlace */}
             <div className="ticket-summary-pill">
               <Icon name="sparkles" size={18} color="#2563eb" />
               <div>
-                <b>Se generará un documento NoSQL en MongoDB Atlas:</b>
+                <b>Revisa tu reporte antes de enviarlo:</b>
                 <p>
                   Título: <i>"{titulo}"</i> | Prioridad: <b>{prioridad.toUpperCase()}</b> | Ubicación: <b>{edificio} ({espacio})</b>
                 </p>
@@ -584,7 +323,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
                 <Icon name="arrow-left" size={16} />
                 <span>Anterior</span>
               </button>
-              <button type="submit" className="btn-primary-glow" disabled={guardando}>
+              <button type="submit" className="btn-primary-glow" disabled={guardando || leyendoFotos}>
                 <Icon name="check" size={18} />
                 <span>{guardando ? 'Registrando…' : 'Registrar Incidencia Oficial'}</span>
               </button>

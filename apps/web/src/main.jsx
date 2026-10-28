@@ -29,6 +29,8 @@ function App() {
   // Estado de Autenticación
   const [usuarioActual, setUsuarioActual] = useState(() => {
     const guardado = localStorage.getItem('utm_desk_user') || sessionStorage.getItem('utm_desk_user');
+    const storedToken = localStorage.getItem('utm_desk_token') || sessionStorage.getItem('utm_desk_token');
+    if (storedToken?.startsWith('mock-token-')) return null;
     if (guardado) {
       try {
         return JSON.parse(guardado);

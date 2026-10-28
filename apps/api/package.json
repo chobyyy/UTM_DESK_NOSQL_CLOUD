@@ -7,7 +7,10 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "seed:demo": "node src/scripts/seedDemo.js",
-    "set:password": "node src/scripts/setPassword.js"
+    "set:password": "node src/scripts/setPassword.js",
+    "migrate:ticket-validator": "node src/scripts/migrateTicketValidator.js",
+    "test:mongodb": "node --test src/checks/ticketPersistence.js",
+    "test:tags": "node --test src/checks/tagPersistence.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

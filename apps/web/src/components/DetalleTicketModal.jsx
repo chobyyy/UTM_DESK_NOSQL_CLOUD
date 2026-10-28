@@ -1,16 +1,43 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Icon from './Icons';
 import { CATEGORIAS_CONFIG } from '../mockData';
-import { updateTicketStatus } from '../lib/api';
+import { updateTicketStatus, updateTicketTags } from '../lib/api';
 
 export default function DetalleTicketModal({ ticket, user, onClose, onActualizarTicket, addToast }) {
+  const [tagsTexto, setTagsTexto] = useState((ticket?.tags || []).join(', '));
+  const [guardandoTags, setGuardandoTags] = useState(false);
+  const [errorTags, setErrorTags] = useState('');
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [horasExtra, setHorasExtra] = useState('0');
-  const [cambiarEstado, setCambiarEstado] = useState(ticket.estado);
+  const [cambiarEstado, setCambiarEstado] = useState(ticket?.estado);
+
+  useEffect(() => {
+    setTagsTexto((ticket?.tags || []).join(', '));
+    setErrorTags('');
+  }, [ticket?.id, ticket?.tags]);
 
   if (!ticket) return null;
 
   const areaConfig = CATEGORIAS_CONFIG[ticket.categoria];
+  const puedeEditarTags = user.rol === 'administrador' || (
+    user.rol === 'coordinador' && user.areas_autorizadas?.includes(ticket.asignacion?.area || ticket.categoria)
+  );
+
+  const handleGuardarTags = async event => {
+    event.preventDefault();
+    if (guardandoTags) return;
+    setGuardandoTags(true);
+    setErrorTags('');
+    try {
+      const actualizado = await updateTicketTags(ticket.id, tagsTexto.split(',').map(tag => tag.trim()).filter(Boolean));
+      onActualizarTicket(actualizado);
+      setTagsTexto((actualizado.tags || []).join(', '));
+      addToast('Etiquetas guardadas correctamente', 'success');
+    } catch (error) {
+      setErrorTags(error.message);
+      addToast(`No se pudieron guardar las etiquetas: ${error.message}`, 'error');
+    } finally { setGuardandoTags(false); }
+  };
 
   const handleAgregarComentario = async (e) => {
     e.preventDefault();
@@ -26,7 +53,7 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
         horas_agregadas: parseFloat(horasExtra) || 0
       });
       onActualizarTicket(ticketActualizado);
-      addToast('Nota registrada y expediente actualizado en MongoDB Atlas', 'success');
+      addToast('Nota registrada y expediente actualizado', 'success');
       setNuevoComentario('');
       setHorasExtra('0');
     } catch (error) {
@@ -60,7 +87,7 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
 
         {/* Modal Main Content Layout */}
         <div className="expediente-body-grid">
-          {/* Columna Izquierda: Información Principal + Detalle NoSQL + Timeline */}
+          {/* Columna Izquierda: Información Principal + Historial */}
           <div className="expediente-left-col">
             {/* Título y Descripción */}
             <div className="exp-section-card">
@@ -72,6 +99,17 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
               </div>
               <p className="exp-desc-box">{ticket.descripcion}</p>
 
+              {puedeEditarTags && (
+                <form className="exp-tags-form" onSubmit={handleGuardarTags} aria-busy={guardandoTags}>
+                  <label htmlFor="ticket-tags">Etiquetas de la incidencia</label>
+                  <p id="ticket-tags-help" className="exp-tags-help">Separa con comas hasta 20 etiquetas de 2 a 40 caracteres. Los espacios se guardan como guiones.</p>
+                  <div className="exp-tags-controls">
+                    <input id="ticket-tags" type="text" value={tagsTexto} onChange={event => { setTagsTexto(event.target.value); setErrorTags(''); }} disabled={guardandoTags} placeholder="wifi, laboratorio, conexion" aria-describedby={errorTags ? 'ticket-tags-help ticket-tags-error' : 'ticket-tags-help'} aria-invalid={Boolean(errorTags)} />
+                    <button type="submit" className="btn-primary" disabled={guardandoTags}>{guardandoTags ? 'Guardando...' : 'Guardar etiquetas'}</button>
+                  </div>
+                  {errorTags && <p id="ticket-tags-error" className="exp-tags-error" role="alert">{errorTags}</p>}
+                </form>
+              )}
               {ticket.tags && ticket.tags.length > 0 && (
                 <div className="exp-tags-row">
                   {ticket.tags.map((tg, i) => (
@@ -79,94 +117,6 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Tarjeta de Atributos Específicos NoSQL */}
-            <div className="exp-section-card nosql-document-card">
-              <div className="nosql-card-title">
-                <Icon name="database" size={18} color="#2563eb" />
-                <h4>Estructura Documental NoSQL (Detalle Específico de Área)</h4>
-                <span className="nosql-badge">MongoDB Mixed Document</span>
-              </div>
-
-              <div className="nosql-kv-grid">
-                {ticket.categoria === 'computo_redes' && (
-                  <>
-                    <div className="nosql-kv-item">
-                      <small>Tipo de Falla</small>
-                      <b>{ticket.detalle_especifico.tipo_falla || 'No especificado'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Equipo / Dispositivo</small>
-                      <b>{ticket.detalle_especifico.equipo || 'No especificado'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>No. de Inventario UTM</small>
-                      <b className="font-mono-tag">{ticket.detalle_especifico.inventario || 'Sin inventario'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Dirección IP Reportada</small>
-                      <b className="font-mono-tag">{ticket.detalle_especifico.direccion_ip || 'DHCP'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Dispositivos Afectados</small>
-                      <b>{ticket.detalle_especifico.dispositivos_afectados || 1} equipo(s)</b>
-                    </div>
-                  </>
-                )}
-
-                {ticket.categoria === 'infraestructura' && (
-                  <>
-                    <div className="nosql-kv-item">
-                      <small>Tipo de Daño Físico</small>
-                      <b>{ticket.detalle_especifico.tipo_dano || 'General'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Nivel de Riesgo Evaluado</small>
-                      <b style={{ color: ticket.detalle_especifico.nivel_riesgo?.includes('Crítico') ? '#dc2626' : '#2563eb' }}>
-                        {ticket.detalle_especifico.nivel_riesgo || 'Moderado'}
-                      </b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Elemento Físico Afectado</small>
-                      <b>{ticket.detalle_especifico.elemento_afectado || 'General'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Materiales Requeridos</small>
-                      <b>{ticket.detalle_especifico.materiales_requeridos || 'Por determinar'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Estatus de Acordonamiento</small>
-                      <b>{ticket.detalle_especifico.requiere_acordonar || 'No requerido'}</b>
-                    </div>
-                  </>
-                )}
-
-                {ticket.categoria === 'academico' && (
-                  <>
-                    <div className="nosql-kv-item">
-                      <small>Plataforma o Sistema</small>
-                      <b>{ticket.detalle_especifico.plataforma || 'General'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Error Identificado</small>
-                      <b>{ticket.detalle_especifico.tipo_error || 'No especificado'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Periodo Escolar</small>
-                      <b>{ticket.detalle_especifico.periodo_escolar || '2026-2'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Curso o Materia</small>
-                      <b>{ticket.detalle_especifico.curso_afectado || 'No aplica'}</b>
-                    </div>
-                    <div className="nosql-kv-item">
-                      <small>Estudiantes Afectados</small>
-                      <b>{ticket.detalle_especifico.estudiantes_afectados || 1} usuario(s)</b>
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
 
             {/* Timeline Vertical de Historial de Seguimiento */}
@@ -309,45 +259,32 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
 
             {/* Evidencias Adjuntas */}
             <div className="exp-sidebar-card">
-              <h4>📎 Evidencias y Documentos ({ticket.evidencias?.length || 0})</h4>
+              <h4>📎 Evidencias fotográficas ({ticket.evidencias?.length || 0})</h4>
               {(!ticket.evidencias || ticket.evidencias.length === 0) ? (
                 <div className="no-evidencias-box">
                   <Icon name="folder" size={28} color="#94a3b8" />
-                  <p>No se adjuntaron fotos o archivos al crear este ticket.</p>
+                  <p>No se adjuntaron fotos al crear este ticket.</p>
                 </div>
               ) : (
                 <div className="evidencias-list">
                   {ticket.evidencias.map((ev, i) => (
                     <div key={ev.id || i} className="evidencia-card-item">
                       <div className="evidencia-icon">
-                        <Icon name="file-text" size={18} color="#2563eb" />
+                        <img src={ev.url_storage} alt={ev.nombre_archivo || ev.nombre} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6 }} />
                       </div>
                       <div className="evidencia-meta">
-                        <b>{ev.nombre}</b>
-                        <small>{ev.peso || '1.2 MB'}</small>
+                        <b>{ev.nombre_archivo || ev.nombre}</b>
+                        <small>{ev.peso_kb != null ? Math.round(ev.peso_kb) + ' KB' : ev.peso}</small>
                       </div>
-                      <button
-                        className="btn-download-ev"
-                        onClick={() => addToast(`Descargando evidencia: ${ev.nombre}`, 'info')}
-                        title="Descargar archivo"
-                      >
-                        ↓
-                      </button>
+                      {ev.url_storage?.startsWith('data:image/') && (
+                        <a className="btn-download-ev" href={ev.url_storage} download={ev.nombre_archivo} title="Descargar foto">↓</a>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Información Técnica de Base NoSQL */}
-            <div className="exp-sidebar-card nosql-cluster-info">
-              <div className="cluster-header">
-                <Icon name="database" size={16} color="#10b981" />
-                <b>MongoDB Atlas Cluster0</b>
-              </div>
-              <p>Colección: <code>incidencias_campus</code></p>
-              <small>Índices: text(titulo, desc), compound(categoria, estado)</small>
-            </div>
           </div>
         </div>
       </div>

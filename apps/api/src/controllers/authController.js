@@ -55,7 +55,7 @@ async function register(req, res, next) {
     const user = await User.create({
       nombre,
       correo,
-      passwordHash,
+      password_hash: passwordHash,
       rol: 'reportante',
       matricula: matricula?.trim() || `UTM-${Math.floor(100000 + Math.random() * 900000)}`,
       carrera: carrera?.trim() || 'Comunidad Universitaria',

@@ -48,14 +48,14 @@ const ticketSchema = new mongoose.Schema(
       area: { type: String, required: true, enum: CATEGORIAS },
       tecnico_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
     },
-    detalle_especifico: { type: mongoose.Schema.Types.Mixed, required: true },
+    detalle_especifico: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     tags: [{ type: String, trim: true, lowercase: true }],
     historial_seguimiento: [seguimientoSchema],
     evidencias_adjuntas: [evidenciaSchema],
     horas_invertidas: { type: Number, min: 0, default: 0 },
     fecha_resolucion: { type: Date, default: null }
   },
-  { timestamps: { createdAt: 'fecha_creacion', updatedAt: 'fecha_actualizacion' }, collection: 'incidencias_campus' }
+  { timestamps: { createdAt: 'fecha_creacion', updatedAt: 'fecha_actualizacion' }, collection: 'incidencias_campus', minimize: false }
 );
 
 ticketSchema.index({ categoria: 1, estado: 1, 'ubicacion.edificio': 1 });
