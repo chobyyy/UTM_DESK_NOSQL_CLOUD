@@ -1822,6 +1822,32 @@ a {
 .prio-alta { background: #ffedd5; color: #c2410c; }
 .prio-critica { background: #fee2e2; color: #b91c1c; }
 
+.priority-edit-trigger {
+  line-height: inherit;
+}
+
+.priority-edit-trigger:focus-visible {
+  outline: 2px solid var(--blue-primary);
+  outline-offset: 3px;
+}
+
+.modal-backdrop.priority-modal-backdrop {
+  z-index: 1100;
+}
+
+.modal-box.priority-modal {
+  width: min(100%, 380px);
+}
+
+.priority-modal .modal-actions {
+  flex-wrap: wrap;
+}
+
+.priority-modal button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
 .status-badge {
   display: inline-block;
   padding: 3px 9px;
@@ -3399,7 +3425,7 @@ a {
   color: var(--text-muted);
 }
 
-.evidence-upload-sim {
+.evidence-upload {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -3410,19 +3436,73 @@ a {
   margin-bottom: 16px;
 }
 
-.evidence-upload-sim div {
+.evidence-upload div {
   flex: 1;
 }
 
-.evidence-upload-sim b {
+.evidence-upload b {
   display: block;
   font-size: 12px;
   color: var(--navy-dark);
 }
 
-.evidence-upload-sim p {
+.evidence-upload p {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.tech-log-modal {
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+
+.tech-evidence-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.tech-evidence-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+
+.tech-evidence-item img {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.tech-evidence-item div {
+  flex: 1;
+  min-width: 0;
+}
+
+.tech-evidence-item b {
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.tech-evidence-item small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.evidencia-meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tech-log-modal button:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .btn-sm-outline {

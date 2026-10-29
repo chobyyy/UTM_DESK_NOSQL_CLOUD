@@ -64,12 +64,13 @@ test('MongoDB real: persiste reportes de las tres áreas con y sin fotos y conse
     for (const withPhoto of [false, true]) {
       const result = await call('', {
         titulo: 'Prueba de persistencia', descripcion: 'Verificación temporal del registro de incidencias.',
-        categoria, prioridad: 'media', ubicacion: { edificio: 'Edificio A (Aulas y Rectoría)', espacio: 'Aula 101' },
+        categoria, ubicacion: { edificio: 'Edificio A (Aulas y Rectoría)', espacio: 'Aula 101' },
         detalle_especifico: {},
         evidencias_adjuntas: withPhoto ? [{ nombre_archivo: 'prueba.png', tipo_mime: 'image/png', url_storage: photoUrl }] : []
       });
       assert.equal(result.status, 201, `${categoria}, foto=${withPhoto}: ${result.body.error}`);
       saved = await CheckTicket.findById(result.body._id).lean();
+      assert.equal(saved.prioridad, 'media');
       assert.deepEqual(saved.detalle_especifico, {});
       assert.equal(saved.evidencias_adjuntas.length, withPhoto ? 1 : 0);
       if (withPhoto) assert.equal(saved.evidencias_adjuntas[0].url_storage, photoUrl);
@@ -90,5 +91,11 @@ test('MongoDB real: persiste reportes de las tres áreas con y sin fotos y conse
       ...saved, _id: new mongoose.Types.ObjectId(), ...invalid
     }), error => error.code === 121, 'MongoDB debe seguir rechazando documentos inválidos');
   }
+  assert.equal(await CheckTicket.countDocuments(), 6);
+  const injectedPriority = await call('', {
+    titulo: 'Prioridad no permitida', descripcion: 'El reportante no decide la prioridad.', categoria: 'computo_redes',
+    ubicacion: { edificio: 'Edificio A', espacio: 'Aula 101' }, prioridad: 'critica'
+  });
+  assert.equal(injectedPriority.status, 403);
   assert.equal(await CheckTicket.countDocuments(), 6);
 });

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Icon from './Icons';
 import { CATEGORIAS_CONFIG } from '../mockData';
 import { updateTicketStatus } from '../lib/api';
+import { readEvidenceFiles } from '../lib/evidenceFiles';
 
 export default function DashboardTecnico({ user, tickets, onActualizarTicket, onVerDetalle, addToast }) {
   const [ticketParaEditar, setTicketParaEditar] = useState(null);
@@ -9,6 +10,22 @@ export default function DashboardTecnico({ user, tickets, onActualizarTicket, on
   const [horasNuevas, setHorasNuevas] = useState('1.5');
   const [notaTecnica, setNotaTecnica] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('todos');
+  const [evidenciasNuevas, setEvidenciasNuevas] = useState([]);
+  const [leyendoEvidencias, setLeyendoEvidencias] = useState(false);
+  const [guardandoAvance, setGuardandoAvance] = useState(false);
+  const selectorEvidencias = useRef(null);
+  const lecturaEnCurso = useRef(false);
+
+  const seleccionarEvidencias = async files => {
+    if (guardandoAvance || lecturaEnCurso.current) return;
+    lecturaEnCurso.current = true;
+    setLeyendoEvidencias(true);
+    try {
+      const nuevas = await readEvidenceFiles(files, evidenciasNuevas.length);
+      setEvidenciasNuevas(previous => [...previous, ...nuevas]);
+    } catch (error) { addToast(error.message, 'error'); }
+    finally { lecturaEnCurso.current = false; setLeyendoEvidencias(false); }
+  };
 
   // Tickets asignados a este técnico
   const asignados = tickets.filter(
@@ -31,27 +48,31 @@ export default function DashboardTecnico({ user, tickets, onActualizarTicket, on
     setNuevoEstado(t.estado === 'abierta' ? 'en_proceso' : t.estado);
     setHorasNuevas('1.0');
     setNotaTecnica('');
+    setEvidenciasNuevas([]);
   };
 
   const guardarAvance = async (e) => {
     e.preventDefault();
+    if (guardandoAvance || leyendoEvidencias) return;
     if (!notaTecnica.trim()) {
       alert('Por favor agrega una nota técnica sobre las acciones realizadas.');
       return;
     }
 
     try {
+      setGuardandoAvance(true);
       const ticketActualizado = await updateTicketStatus(ticketParaEditar.id, {
         estado: nuevoEstado,
         comentario: notaTecnica,
-        horas_agregadas: parseFloat(horasNuevas) || 0
+        horas_agregadas: parseFloat(horasNuevas) || 0,
+        evidencias_adjuntas: evidenciasNuevas
       });
       onActualizarTicket(ticketActualizado);
-      addToast(`Ticket ${ticketParaEditar.codigo} actualizado a ${nuevoEstado.toUpperCase()}`, 'success');
+      addToast(`Bitácora de ${ticketParaEditar.codigo} guardada${evidenciasNuevas.length ? ' con ' + evidenciasNuevas.length + ' evidencia(s)' : ''}`, 'success');
       setTicketParaEditar(null);
     } catch (error) {
       addToast(`No fue posible actualizar el ticket: ${error.message}`, 'error');
-    }
+    } finally { setGuardandoAvance(false); }
   };
 
   return (
@@ -227,7 +248,7 @@ export default function DashboardTecnico({ user, tickets, onActualizarTicket, on
       {/* Modal Interactivo de Actualización de Avance */}
       {ticketParaEditar && (
         <div className="modal-backdrop">
-          <div className="modal-box modal-lg">
+          <div className="modal-box modal-lg tech-log-modal">
             <div className="modal-header">
               <div className="modal-title-with-icon">
                 <Icon name="wrench" size={20} color="#2563eb" />
@@ -236,7 +257,7 @@ export default function DashboardTecnico({ user, tickets, onActualizarTicket, on
                   <small>{ticketParaEditar.titulo}</small>
                 </div>
               </div>
-              <button className="modal-close-btn" onClick={() => setTicketParaEditar(null)}>✕</button>
+              <button className="modal-close-btn" disabled={guardandoAvance || leyendoEvidencias} onClick={() => setTicketParaEditar(null)}>✕</button>
             </div>
 
             <form onSubmit={guardarAvance} className="modal-body-form">
@@ -245,6 +266,7 @@ export default function DashboardTecnico({ user, tickets, onActualizarTicket, on
                   <label>Actualizar Estado del Ticket</label>
                   <select
                     value={nuevoEstado}
+                    disabled={guardandoAvance}
                     onChange={(e) => setNuevoEstado(e.target.value)}
                     className="select-custom"
                   >
@@ -261,9 +283,10 @@ export default function DashboardTecnico({ user, tickets, onActualizarTicket, on
                     <input
                       type="number"
                       step="0.5"
-                      min="0.5"
+                      min="0"
                       max="24"
                       value={horasNuevas}
+                      disabled={guardandoAvance}
                       onChange={(e) => setHorasNuevas(e.target.value)}
                       required
                     />
@@ -277,28 +300,42 @@ export default function DashboardTecnico({ user, tickets, onActualizarTicket, on
                   rows={4}
                   placeholder="Detalla qué revisiones hiciste, mediciones, cambio de cables, parches o piezas reemplazadas..."
                   value={notaTecnica}
+                  disabled={guardandoAvance}
+                  maxLength={2000}
                   onChange={(e) => setNotaTecnica(e.target.value)}
                   required
                 />
               </div>
 
-              <div className="evidence-upload-sim">
+              <div className="evidence-upload" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); seleccionarEvidencias(event.dataTransfer.files); }}>
                 <Icon name="folder" size={22} color="#2563eb" />
                 <div>
-                  <b>Adjuntar Evidencia Fotográfica o Log de Diagnóstico</b>
-                  <p>Arrastra imágenes de la reparación (.jpg, .png) o reportes generados</p>
+                  <b>Adjuntar evidencias de la reparación</b>
+                  <p>Selecciona o arrastra hasta 3 archivos por avance: JPEG, PNG, WebP, PDF, TXT o LOG. Máximo 2 MB por archivo.</p>
                 </div>
-                <button type="button" className="btn-sm-outline" onClick={() => addToast('Archivo simulado adjuntado a la bitácora', 'info')}>
-                  Examinar...
+                <input ref={selectorEvidencias} type="file" hidden multiple accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.txt,.log" onChange={event => { seleccionarEvidencias(event.target.files); event.target.value = ''; }} />
+                <button type="button" className="btn-sm-outline" disabled={guardandoAvance || leyendoEvidencias || evidenciasNuevas.length >= 3} onClick={() => selectorEvidencias.current.click()}>
+                  {leyendoEvidencias ? 'Leyendo...' : 'Examinar...'}
                 </button>
               </div>
+              {evidenciasNuevas.length > 0 && (
+                <div className="tech-evidence-list" aria-label="Evidencias pendientes de guardar">
+                  {evidenciasNuevas.map((file, index) => (
+                    <div className="tech-evidence-item" key={index}>
+                      {file.tipo_mime.startsWith('image/') ? <img src={file.url_storage} alt={file.nombre_archivo} /> : <Icon name="file-text" size={28} color="#2563eb" />}
+                      <div><b>{file.nombre_archivo}</b><small>{Math.ceil(file.peso_kb)} KB · Se guardará con la bitácora</small></div>
+                      <button type="button" className="btn-sm-outline" disabled={guardandoAvance || leyendoEvidencias} aria-label={'Quitar ' + file.nombre_archivo} onClick={() => setEvidenciasNuevas(previous => previous.filter((_, position) => position !== index))}>Quitar</button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setTicketParaEditar(null)}>
+                <button type="button" className="btn-secondary" disabled={guardandoAvance || leyendoEvidencias} onClick={() => setTicketParaEditar(null)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Guardar Bitácora y Notificar
+                <button type="submit" className="btn-primary" disabled={guardandoAvance || leyendoEvidencias}>
+                  {guardandoAvance ? 'Guardando bitácora...' : 'Guardar Bitácora'}
                 </button>
               </div>
             </form>

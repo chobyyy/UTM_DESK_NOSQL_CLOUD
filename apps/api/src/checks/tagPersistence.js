@@ -10,7 +10,7 @@ const { Ticket } = require('../models/Ticket');
 const { User } = require('../models/User');
 const app = require('../app');
 
-test('MongoDB real: guarda, recupera y elimina etiquetas en expedientes actuales y antiguos', async t => {
+test('MongoDB real: guarda etiquetas y prioridades en expedientes actuales y antiguos', async t => {
   let db;
   let collection;
   let server;
@@ -44,14 +44,14 @@ test('MongoDB real: guarda, recupera y elimina etiquetas en expedientes actuales
   t.mock.method(User, 'findById', async id => Object.values(actors).find(actor => actor._id.equals(id)));
   server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
-  const call = async (id, actor = 'coordinador', tags) => {
+  const call = async (id, actor = 'coordinador', value, field = 'tags') => {
     const token = jwt.sign({ sub: actors[actor]._id.toString() }, process.env.JWT_SECRET, {
       issuer: 'utm-desk-api', audience: 'utm-desk-web', expiresIn: '5m'
     });
-    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/tickets/${id}${tags === undefined ? '' : '/tags'}`, {
-      method: tags === undefined ? 'GET' : 'PATCH',
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/tickets/${id}${value === undefined ? '' : '/' + field}`, {
+      method: value === undefined ? 'GET' : 'PATCH',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      ...(tags === undefined ? {} : { body: JSON.stringify({ tags }) }),
+      ...(value === undefined ? {} : { body: JSON.stringify({ [field]: value }) }),
       signal: AbortSignal.timeout(15000)
     });
     return { status: response.status, body: await response.json() };
@@ -102,6 +102,24 @@ test('MongoDB real: guarda, recupera y elimina etiquetas en expedientes actuales
     const cleared = await call(initial._id, 'coordinador', []);
     assert.equal(cleared.status, 200, cleared.body.error);
     assert.deepEqual((await call(initial._id)).body.tags, []);
-    console.log(`Expediente ${format}: etiquetas guardadas, recuperadas y eliminadas; permisos y datos conservados.`);
+    const beforePriority = await db.collection(collection).findOne({ _id: initial._id });
+    const prioridad = beforePriority.prioridad === 'critica' ? 'baja' : 'critica';
+    const prioritized = await call(initial._id, 'coordinador', prioridad, 'prioridad');
+    assert.equal(prioritized.status, 200, prioritized.body.error);
+    assert.equal((await call(initial._id)).body.prioridad, prioridad);
+    const afterPriority = await db.collection(collection).findOne({ _id: initial._id });
+    assert.deepEqual(afterPriority.asignacion, beforePriority.asignacion);
+    assert.deepEqual(afterPriority.evidencias_adjuntas, beforePriority.evidencias_adjuntas);
+    assert.equal(afterPriority.estado, beforePriority.estado);
+    assert.deepEqual(afterPriority.fecha_resolucion, beforePriority.fecha_resolucion);
+    assert.equal(afterPriority.historial_seguimiento.at(-1).accion, 'comentario');
+    assert.match(afterPriority.historial_seguimiento.at(-1).comentario, /Prioridad actualizada/);
+    assert.ok(afterPriority.historial_seguimiento.at(-1).actor_id.equals(actors.coordinador._id));
+    const historyLength = afterPriority.historial_seguimiento.length;
+    assert.equal((await call(initial._id, 'coordinador', prioridad, 'prioridad')).status, 200);
+    assert.equal((await db.collection(collection).findOne({ _id: initial._id })).historial_seguimiento.length, historyLength);
+    for (const actor of ['reportante', 'tecnico', 'otra_area']) assert.equal((await call(initial._id, actor, 'alta', 'prioridad')).status, 403);
+    assert.equal((await call(initial._id, 'administrador', 'alta', 'prioridad')).status, 200);
+    console.log(`Expediente ${format}: etiquetas y prioridad persistidas; permisos, historial y datos conservados.`);
   }
 });

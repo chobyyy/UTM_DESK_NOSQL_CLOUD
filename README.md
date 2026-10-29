@@ -23,9 +23,15 @@ Si el frontend abre pero no guarda reportes, comprueba `http://localhost:4000/ap
 
 Los alumnos solo necesitan indicar título, descripción y ubicación del problema. Las fotos son opcionales; los inventarios, direcciones IP y evaluaciones técnicas no son requisitos para registrar una incidencia.
 
+El reportante no selecciona la prioridad: la API crea los reportes con prioridad `media` inicial y rechaza ese campo en el registro. La coordinación puede asignarla desde la insignia de prioridad del detalle, que abre un modal pequeño, o al asignar un técnico. El cambio se guarda con su autor en el historial; cada coordinador solo modifica incidencias de sus áreas. El administrador conserva los permisos de gestión.
+
 Si MongoDB rechaza el registro con `Document failed validation` (código 121), ejecuta una vez `npm run migrate:ticket-validator --workspace=@utm-desk/api`. La migración admite el documento del formulario actual y las fotos JPEG, PNG y WebP, conserva el contrato anterior para los expedientes existentes y mantiene la validación en `strict`/`error`. Antes del cambio guarda un respaldo en `apps/api/.validator-backups/` con el comando para restaurar el validador original. No modifica ni elimina incidencias.
 
 `npm run test:mongodb --workspace=@utm-desk/api` verifica el registro con y sin fotos contra MongoDB real usando una colección temporal que elimina al terminar; requiere `apps/api/.env` y permisos para crear y eliminar esa colección.
+
+La bitácora del técnico permite seleccionar o arrastrar hasta 3 evidencias por avance (JPEG, PNG, WebP, PDF, TXT o LOG, de hasta 2 MB cada una). Los archivos se guardan como datos binarios en `utm_desk.evidencias_tecnicas`, vinculados a la incidencia y al usuario que los subió; el ticket admite hasta 20 evidencias técnicas. Los adjuntos originales del reporte se conservan. La nota, el estado, las horas y los archivos se confirman en una transacción. La descarga requiere una sesión con acceso a la incidencia; las imágenes tienen vista previa en su detalle. El almacenamiento y su índice se crean en la primera carga, sin cambiar el validador de incidencias.
+
+`npm run test:evidence --workspace=@utm-desk/api` comprueba cargas, descargas, permisos y reversión de la bitácora con MongoDB real. Usa dos colecciones temporales y las elimina al terminar.
 
 ## Variables para Render
 

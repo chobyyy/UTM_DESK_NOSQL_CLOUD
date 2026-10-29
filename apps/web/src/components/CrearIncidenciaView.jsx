@@ -10,7 +10,6 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
   // Campos Generales
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
-  const [prioridad, setPrioridad] = useState('media');
   const [edificio, setEdificio] = useState(EDIFICIOS_UTM[0]);
   const [espacio, setEspacio] = useState('');
 
@@ -72,7 +71,6 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
       titulo: titulo.trim(),
       descripcion: descripcion.trim(),
       categoria,
-      prioridad,
       ubicacion: {
         edificio,
         espacio: espacio.trim()
@@ -180,7 +178,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
                 {areaConfig.emoji} {areaConfig.nombre}
               </div>
               <h3>Paso 2: Información General y Ubicación en el Campus</h3>
-              <p>Define claramente el título, la ubicación y el nivel de prioridad preliminar.</p>
+              <p>Describe el problema y su ubicación. La coordinación asignará la prioridad.</p>
             </div>
 
             <div className="form-fields-container">
@@ -212,7 +210,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
                 />
               </div>
 
-              <div className="form-grid-3">
+              <div className="form-grid-2">
                 <div className="input-field-group">
                   <label>Edificio de la UTM *</label>
                   <select
@@ -240,19 +238,6 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
                   </div>
                 </div>
 
-                <div className="input-field-group">
-                  <label>Prioridad Preliminar</label>
-                  <select
-                    value={prioridad}
-                    onChange={(e) => setPrioridad(e.target.value)}
-                    className="select-custom"
-                  >
-                    <option value="baja">🟢 Baja (No urgente)</option>
-                    <option value="media">🟡 Media (Falla moderada)</option>
-                    <option value="alta">🟠 Alta (Interrumpe docencia)</option>
-                    <option value="critica">🔴 Crítica (Emergencia)</option>
-                  </select>
-                </div>
               </div>
 
 
@@ -313,7 +298,7 @@ export default function CrearIncidenciaView({ user, onTicketCreado, onCancelar, 
               <div>
                 <b>Revisa tu reporte antes de enviarlo:</b>
                 <p>
-                  Título: <i>"{titulo}"</i> | Prioridad: <b>{prioridad.toUpperCase()}</b> | Ubicación: <b>{edificio} ({espacio})</b>
+                  Título: <i>"{titulo}"</i> | Ubicación: <b>{edificio} ({espacio})</b>
                 </p>
               </div>
             </div>

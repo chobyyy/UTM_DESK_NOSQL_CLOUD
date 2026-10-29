@@ -1,11 +1,14 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const { Ticket, ESTADOS } = require('../models/Ticket');
+const { Ticket, ESTADOS, PRIORIDADES } = require('../models/Ticket');
 const { User } = require('../models/User');
+const { TechnicalEvidence } = require('../models/TechnicalEvidence');
 const { requireAuth, allowRoles } = require('../middleware/auth');
 const { validateTicketInput } = require('../utils/ticketRules');
 
 const { validatePhotos } = require('../utils/photos');
+const { updateTicketWithEvent } = require('../utils/ticketUpdates');
+const { decodeEvidence, ensureEvidenceStorage, withTechnicalEvidence, MAX_TICKET_FILES } = require('../utils/technicalEvidence');
 
 const router = express.Router();
 
@@ -15,6 +18,7 @@ function ticketCode() {
 
 router.post('/', requireAuth, allowRoles('reportante'), async (req, res, next) => {
   try {
+    if (req.body.prioridad !== undefined) return res.status(403).json({ error: 'La prioridad la asigna la coordinación. Envía el reporte sin ese campo' });
     if (req.body.tags !== undefined && (!Array.isArray(req.body.tags) || req.body.tags.length)) return res.status(403).json({ error: 'Solo el coordinador y el administrador pueden asignar etiquetas' });
     const photoError = validatePhotos(req.body.evidencias_adjuntas);
     if (photoError) return res.status(400).json({ error: photoError });
@@ -23,6 +27,7 @@ router.post('/', requireAuth, allowRoles('reportante'), async (req, res, next) =
 
     const ticket = await Ticket.create({
       ...req.body,
+      prioridad: 'media',
       tags: [],
       codigo: ticketCode(),
       asignacion: { area: req.body.categoria, tecnico_id: null },
@@ -47,7 +52,7 @@ router.get('/', requireAuth, async (req, res, next) => {
       .populate('asignacion.tecnico_id', 'nombre correo')
       .populate('historial_seguimiento.actor_id', 'nombre')
       .sort({ fecha_creacion: -1 }).limit(100);
-    res.json(tickets);
+    res.json(await withTechnicalEvidence(tickets));
   } catch (error) { next(error); }
 });
 
@@ -64,52 +69,114 @@ router.get('/:id', requireAuth, async (req, res, next) => {
     if (req.user.rol === 'reportante' && !owner) return res.status(403).json({ error: 'No puedes consultar este ticket' });
     if (req.user.rol === 'tecnico' && !technician) return res.status(403).json({ error: 'No puedes consultar este ticket' });
     if (req.user.rol === 'coordinador' && !areaAllowed) return res.status(403).json({ error: 'No puedes consultar este ticket' });
-    res.json(ticket);
+    res.json(await withTechnicalEvidence(ticket));
   } catch (error) { next(error); }
 });
 
 router.patch('/:id/asignacion', requireAuth, allowRoles('coordinador', 'administrador'), async (req, res, next) => {
   try {
     const { tecnico_id, prioridad, comentario = 'Ticket asignado' } = req.body;
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Identificador de incidencia no válido' });
     if (!mongoose.isValidObjectId(tecnico_id)) return res.status(400).json({ error: 'tecnico_id no válido' });
+    if (prioridad !== undefined && !PRIORIDADES.includes(prioridad)) return res.status(400).json({ error: 'Selecciona una prioridad válida' });
+    if (typeof comentario !== 'string' || comentario.trim().length > 2000) return res.status(400).json({ error: 'El comentario debe ser un texto de máximo 2000 caracteres' });
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
     if (req.user.rol === 'coordinador' && !req.user.areas_autorizadas.includes(ticket.asignacion.area)) return res.status(403).json({ error: 'Área no autorizada' });
     const tecnico = await User.findOne({ _id: tecnico_id, rol: 'tecnico', activo: true });
     if (!tecnico) return res.status(400).json({ error: 'El técnico seleccionado no está disponible' });
     if (!tecnico.areas_autorizadas.includes(ticket.asignacion.area)) return res.status(400).json({ error: 'El técnico no está autorizado para el área del ticket' });
-    if (prioridad) ticket.prioridad = prioridad;
-    ticket.asignacion.tecnico_id = tecnico_id;
-    ticket.historial_seguimiento.push({ actor_id: req.user._id, accion: 'asignacion', estado_anterior: ticket.estado, estado_nuevo: ticket.estado, comentario });
-    await ticket.save();
-    await ticket.populate('reportante.usuario_id', 'nombre correo');
-    await ticket.populate('asignacion.tecnico_id', 'nombre correo');
-    await ticket.populate('historial_seguimiento.actor_id', 'nombre');
-    res.json(ticket);
+    const fields = {
+      'asignacion.tecnico_id': tecnico._id,
+      ...(prioridad !== undefined ? { prioridad } : {})
+    };
+    if (ticket.get('version') !== undefined) {
+      fields['asignacion.asignado_por'] = req.user._id;
+      fields['asignacion.fecha_asignacion'] = new Date();
+    }
+    const result = await updateTicketWithEvent(ticket, {
+      actorId: req.user._id, accion: 'asignacion',
+      comentario: comentario.trim() || 'Ticket asignado', fields
+    });
+    if (!result.matchedCount) return res.status(409).json({ error: 'La incidencia cambió mientras asignabas el técnico. Vuelve a abrirla antes de confirmar' });
+    const actualizado = await Ticket.findById(ticket._id)
+      .populate('reportante.usuario_id', 'nombre correo')
+      .populate('asignacion.tecnico_id', 'nombre correo')
+      .populate('historial_seguimiento.actor_id', 'nombre');
+    res.json(await withTechnicalEvidence(actualizado));
+  } catch (error) { next(error); }
+});
+
+router.patch('/:id/prioridad', requireAuth, allowRoles('coordinador', 'administrador'), async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Identificador de incidencia no válido' });
+    const { prioridad } = req.body;
+    if (!PRIORIDADES.includes(prioridad)) return res.status(400).json({ error: 'Selecciona una prioridad válida' });
+    const ticket = await Ticket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
+    if (req.user.rol === 'coordinador' && !req.user.areas_autorizadas.includes(ticket.asignacion.area)) return res.status(403).json({ error: 'Área no autorizada' });
+    if (ticket.prioridad !== prioridad) {
+      const result = await updateTicketWithEvent(ticket, {
+        actorId: req.user._id, accion: 'comentario',
+        comentario: `Prioridad actualizada de ${ticket.prioridad.toUpperCase()} a ${prioridad.toUpperCase()}`,
+        fields: { prioridad }
+      });
+      if (!result.matchedCount) return res.status(409).json({ error: 'La incidencia cambió mientras editabas. Vuelve a abrirla antes de guardar la prioridad' });
+    }
+    const actualizado = await Ticket.findById(ticket._id)
+      .populate('reportante.usuario_id', 'nombre correo')
+      .populate('asignacion.tecnico_id', 'nombre correo')
+      .populate('historial_seguimiento.actor_id', 'nombre');
+    res.json(await withTechnicalEvidence(actualizado));
   } catch (error) { next(error); }
 });
 
 router.patch('/:id/estado', requireAuth, allowRoles('tecnico', 'coordinador', 'administrador'), async (req, res, next) => {
   try {
     const { estado, comentario, horas_agregadas = 0 } = req.body;
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Identificador de incidencia no válido' });
     if (!ESTADOS.includes(estado)) return res.status(400).json({ error: 'estado no válido' });
+    if (typeof comentario !== 'string' || !comentario.trim() || comentario.trim().length > 2000) return res.status(400).json({ error: 'Escribe una nota de entre 1 y 2000 caracteres' });
+    if (typeof horas_agregadas !== 'number' || !Number.isFinite(horas_agregadas) || horas_agregadas < 0 || horas_agregadas > 24) return res.status(400).json({ error: 'Las horas adicionales deben ser un número entre 0 y 24' });
+    if (['resuelta', 'cerrada'].includes(estado) && comentario.trim().length < 5) return res.status(400).json({ error: 'Describe la solución con al menos 5 caracteres' });
+    const files = decodeEvidence(req.body.evidencias_adjuntas);
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
     const isAssignedTech = ticket.asignacion.tecnico_id?.equals(req.user._id);
     const isAllowedCoordinator = req.user.rol !== 'coordinador' || req.user.areas_autorizadas.includes(ticket.asignacion.area);
     if (req.user.rol === 'tecnico' && !isAssignedTech) return res.status(403).json({ error: 'No tienes asignado este ticket' });
     if (!isAllowedCoordinator) return res.status(403).json({ error: 'Área no autorizada' });
-    const previous = ticket.estado;
-    ticket.estado = estado;
-    if (estado === 'resuelta') ticket.fecha_resolucion = new Date();
-    if (estado === 'en_proceso') ticket.fecha_resolucion = null;
-    ticket.horas_invertidas += Number(horas_agregadas) || 0;
-    ticket.historial_seguimiento.push({ actor_id: req.user._id, accion: 'cambio_estado', estado_anterior: previous, estado_nuevo: estado, comentario, horas_agregadas });
-    await ticket.save();
-    await ticket.populate('reportante.usuario_id', 'nombre correo');
-    await ticket.populate('asignacion.tecnico_id', 'nombre correo');
-    await ticket.populate('historial_seguimiento.actor_id', 'nombre');
-    res.json(ticket);
+    if (estado !== 'abierta' && !ticket.asignacion.tecnico_id) return res.status(400).json({ error: 'Asigna un técnico antes de registrar el avance' });
+    const antiguo = ticket.get('version') !== undefined;
+    const estadoGuardado = antiguo ? estado.replaceAll('_', ' ') : estado;
+    const finalizado = ['resuelta', 'cerrada'].includes(estado);
+    const fields = {
+      estado: estadoGuardado,
+      horas_invertidas: Number(ticket.horas_invertidas || 0) + horas_agregadas,
+      fecha_resolucion: finalizado ? ticket.fecha_resolucion || new Date() : null,
+      ...(antiguo ? { resultado: finalizado ? comentario.trim() : null, fecha_cierre: estado === 'cerrada' ? new Date() : null } : {})
+    };
+    const saveAdvance = async session => {
+      const result = await updateTicketWithEvent(ticket, {
+        actorId: req.user._id, accion: 'cambio_estado', comentario: comentario.trim(), fields,
+        estadoNuevo: estadoGuardado, horasAgregadas: horas_agregadas, session
+      });
+      if (!result.matchedCount) throw Object.assign(new Error('La incidencia cambió mientras editabas. Vuelve a abrirla antes de guardar el avance'), { statusCode: 409 });
+      if (files.length) {
+        const count = await TechnicalEvidence.countDocuments({ ticket_id: ticket._id }).session(session);
+        if (count + files.length > MAX_TICKET_FILES) throw Object.assign(new Error('La incidencia admite hasta 20 evidencias técnicas'), { statusCode: 400 });
+        await TechnicalEvidence.insertMany(files.map(file => ({ ...file, ticket_id: ticket._id, subido_por: req.user._id })), { session });
+      }
+    };
+    if (files.length) {
+      await ensureEvidenceStorage();
+      await mongoose.connection.transaction(saveAdvance);
+    } else { await saveAdvance(); }
+    const actualizado = await Ticket.findById(ticket._id)
+      .populate('reportante.usuario_id', 'nombre correo')
+      .populate('asignacion.tecnico_id', 'nombre correo')
+      .populate('historial_seguimiento.actor_id', 'nombre');
+    res.json(await withTechnicalEvidence(actualizado));
   } catch (error) { next(error); }
 });
 
@@ -125,33 +192,32 @@ router.patch('/:id/tags', requireAuth, allowRoles('coordinador', 'administrador'
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
     if (req.user.rol === 'coordinador' && !req.user.areas_autorizadas.includes(ticket.asignacion.area)) return res.status(403).json({ error: 'Área no autorizada' });
-    const antiguo = ticket.get('version') !== undefined;
-    const campoVersion = antiguo ? 'version' : '__v';
-    const version = ticket.get(campoVersion);
-    const fecha = new Date();
-    const evento = {
-      fecha, actor_id: req.user._id, accion: 'etiquetas',
-      estado_anterior: ticket.estado, estado_nuevo: ticket.estado,
-      comentario: 'Etiquetas actualizadas', horas_agregadas: 0,
-      ...(antiguo ? { _id: new mongoose.Types.ObjectId(), visibilidad: 'publico' } : {})
-    };
-    // Actualiza únicamente etiquetas e historial sin recastear el contrato antiguo.
-    // MongoDB conserva su validación; la versión evita sobrescribir cambios concurrentes.
-    const result = await Ticket.collection.updateOne({
-      _id: ticket._id,
-      estado: ticket.estado,
-      [campoVersion]: version === undefined ? { $exists: false } : version
-    }, {
-      $set: { tags: etiquetas, fecha_actualizacion: fecha },
-      $push: { historial_seguimiento: evento },
-      $inc: { [campoVersion]: 1 }
+    const result = await updateTicketWithEvent(ticket, {
+      actorId: req.user._id, accion: 'etiquetas',
+      comentario: 'Etiquetas actualizadas', fields: { tags: etiquetas }
     });
     if (!result.matchedCount) return res.status(409).json({ error: 'La incidencia cambió mientras editabas. Vuelve a abrirla antes de guardar las etiquetas' });
     const actualizado = await Ticket.findById(ticket._id)
       .populate('reportante.usuario_id', 'nombre correo')
       .populate('asignacion.tecnico_id', 'nombre correo')
       .populate('historial_seguimiento.actor_id', 'nombre');
-    res.json(actualizado);
+    res.json(await withTechnicalEvidence(actualizado));
+  } catch (error) { next(error); }
+});
+
+router.get('/:id/evidencias/:evidenciaId', requireAuth, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id) || !mongoose.isValidObjectId(req.params.evidenciaId)) return res.status(400).json({ error: 'Identificador de evidencia no válido' });
+    const ticket = await Ticket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
+    const owner = ticket.reportante.usuario_id?.equals(req.user._id);
+    const assigned = ticket.asignacion.tecnico_id?.equals(req.user._id);
+    const areaAllowed = req.user.areas_autorizadas?.includes(ticket.asignacion.area);
+    if ((req.user.rol === 'reportante' && !owner) || (req.user.rol === 'tecnico' && !assigned) || (req.user.rol === 'coordinador' && !areaAllowed)) return res.status(403).json({ error: 'No puedes consultar esta evidencia' });
+    const file = await TechnicalEvidence.findOne({ _id: req.params.evidenciaId, ticket_id: ticket._id }).select('+contenido');
+    if (!file) return res.status(404).json({ error: 'Evidencia no encontrada' });
+    res.attachment(file.nombre_archivo).type(file.tipo_mime)
+      .set('X-Content-Type-Options', 'nosniff').set('Cache-Control', 'private, no-store').send(Buffer.from(file.contenido));
   } catch (error) { next(error); }
 });
 

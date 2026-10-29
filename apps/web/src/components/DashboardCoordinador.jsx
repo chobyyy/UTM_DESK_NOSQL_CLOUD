@@ -11,6 +11,7 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
   const [tecnicoSeleccionado, setTecnicoSeleccionado] = useState('');
   const [prioridadSeleccionada, setPrioridadSeleccionada] = useState('media');
   const [comentarioAsignacion, setComentarioAsignacion] = useState('');
+  const [asignando, setAsignando] = useState(false);
   const [filtroArea, setFiltroArea] = useState(areaKey);
   const [filtroEstado, setFiltroEstado] = useState('todos');
 
@@ -45,6 +46,7 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
 
   const guardarAsignacion = async (e) => {
     e.preventDefault();
+    if (asignando) return;
     const tecnicoObj = listaTecnicos.find((u) => u.id === tecnicoSeleccionado);
     if (!tecnicoObj) {
       alert('Selecciona un técnico válido');
@@ -52,6 +54,7 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
     }
 
     try {
+      setAsignando(true);
       const ticketActualizado = await assignTicket(ticketParaAsignar.id, {
         tecnico_id: tecnicoObj.id,
         prioridad: prioridadSeleccionada,
@@ -62,7 +65,7 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
       setTicketParaAsignar(null);
     } catch (error) {
       addToast(`No fue posible asignar el ticket: ${error.message}`, 'error');
-    }
+    } finally { setAsignando(false); }
   };
 
   return (
@@ -290,7 +293,7 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
                   <small>{ticketParaAsignar.codigo} · {ticketParaAsignar.titulo}</small>
                 </div>
               </div>
-              <button className="modal-close-btn" onClick={() => setTicketParaAsignar(null)}>✕</button>
+              <button className="modal-close-btn" disabled={asignando} onClick={() => setTicketParaAsignar(null)}>✕</button>
             </div>
 
             <form onSubmit={guardarAsignacion} className="modal-body-form">
@@ -298,6 +301,7 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
                 <label>Seleccionar Técnico de Soporte</label>
                 <select
                   value={tecnicoSeleccionado}
+                  disabled={asignando}
                   onChange={(e) => setTecnicoSeleccionado(e.target.value)}
                   className="select-custom"
                   required
@@ -305,7 +309,7 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
                   <option value="">-- Elige un técnico calificado --</option>
                   {listaTecnicos.map((tec) => (
                     <option key={tec.id} value={tec.id}>
-                      {tec.nombre} ({tec.especialidad})
+                      {tec.nombre}
                     </option>
                   ))}
                 </select>
@@ -315,6 +319,7 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
                 <label>Nivel de Prioridad Institucional</label>
                 <select
                   value={prioridadSeleccionada}
+                  disabled={asignando}
                   onChange={(e) => setPrioridadSeleccionada(e.target.value)}
                   className="select-custom"
                 >
@@ -329,6 +334,8 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
                 <label>Instrucciones de Asignación / Comentario</label>
                 <textarea
                   rows={3}
+                  disabled={asignando}
+                  maxLength={2000}
                   value={comentarioAsignacion}
                   onChange={(e) => setComentarioAsignacion(e.target.value)}
                   placeholder="Instrucciones específicas para el técnico que acudirá..."
@@ -336,11 +343,11 @@ export default function DashboardCoordinador({ user, tickets, onActualizarTicket
               </div>
 
               <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setTicketParaAsignar(null)}>
+                <button type="button" className="btn-secondary" disabled={asignando} onClick={() => setTicketParaAsignar(null)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Confirmar Asignación
+                <button type="submit" className="btn-primary" disabled={asignando}>
+                  {asignando ? 'Asignando...' : 'Confirmar Asignación'}
                 </button>
               </div>
             </form>

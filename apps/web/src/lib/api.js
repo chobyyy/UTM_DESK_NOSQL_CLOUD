@@ -22,7 +22,10 @@ async function request(path, options = {}) {
   }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (body.error) throw new Error([body.error, ...(Array.isArray(body.details) ? body.details : [])].join('. '));
+    if (body.error) {
+      const details = Array.isArray(body.details) ? body.details : typeof body.details === 'string' ? [body.details] : [];
+      throw new Error([body.error, ...details].join('. '));
+    }
     if (response.status === 413) throw new Error('Las fotos superan el límite permitido por el servidor.');
     if (response.status >= 500) throw new Error('La API no está disponible. Inicia el servidor y verifica su conexión con MongoDB. Tu reporte no se ha enviado.');
     throw new Error('No fue posible completar la solicitud (HTTP ' + response.status + ').');
@@ -47,6 +50,7 @@ function toUiTicket(ticket) {
   const tecnico = ticket.asignacion?.tecnico_id;
   return {
     ...ticket,
+    estado: ticket.estado?.replaceAll(' ', '_'),
     id: ticket._id,
     detalle_especifico: ticket.detalle_especifico || {},
     reportante: {
@@ -65,12 +69,12 @@ function toUiTicket(ticket) {
       fecha: item.fecha,
       accion: item.accion,
       comentario: item.comentario,
-      estadoNuevo: item.estado_nuevo,
-      estadoAnterior: item.estado_anterior,
+      estadoNuevo: item.estado_nuevo?.replaceAll(' ', '_'),
+      estadoAnterior: item.estado_anterior?.replaceAll(' ', '_') ?? null,
       horas: item.horas_agregadas || 0,
       actor: item.actor_id?.nombre || 'Usuario institucional'
     })),
-    evidencias: ticket.evidencias_adjuntas || []
+    evidencias: [...(ticket.evidencias_adjuntas || []), ...(ticket.evidencias_tecnicas || [])]
   };
 }
 
@@ -84,6 +88,24 @@ export async function createTicket(data) {
 
 export async function updateTicketStatus(id, data) {
   return toUiTicket(await request(`/tickets/${id}/estado`, { method: 'PATCH', body: JSON.stringify(data) }));
+}
+
+export async function getEvidenceFile(ticketId, evidenceId, { signal } = {}) {
+  const authToken = token();
+  let response;
+  try {
+    response = await fetch(API_URL + `/tickets/${ticketId}/evidencias/${evidenceId}`, {
+      headers: authToken ? { Authorization: 'Bearer ' + authToken } : {}, signal
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    throw new Error('No se pudo conectar para descargar la evidencia.');
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || 'No fue posible descargar la evidencia.');
+  }
+  return response.blob();
 }
 
 export async function assignTicket(id, data) {
@@ -100,4 +122,8 @@ export async function listUsers() {
 
 export async function updateTicketTags(id, tags) {
   return toUiTicket(await request(`/tickets/${id}/tags`, { method: "PATCH", body: JSON.stringify({ tags }) }));
+}
+
+export async function updateTicketPriority(id, prioridad) {
+  return toUiTicket(await request(`/tickets/${id}/prioridad`, { method: 'PATCH', body: JSON.stringify({ prioridad }) }));
 }

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Icon from './Icons';
+import PriorityModal from './PriorityModal';
 import { CATEGORIAS_CONFIG } from '../mockData';
-import { updateTicketStatus, updateTicketTags } from '../lib/api';
+import { updateTicketStatus, updateTicketTags, getEvidenceFile } from '../lib/api';
 
 export default function DetalleTicketModal({ ticket, user, onClose, onActualizarTicket, addToast }) {
   const [tagsTexto, setTagsTexto] = useState((ticket?.tags || []).join(', '));
@@ -10,6 +11,28 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [horasExtra, setHorasExtra] = useState('0');
   const [cambiarEstado, setCambiarEstado] = useState(ticket?.estado);
+  const [vistasPrevias, setVistasPrevias] = useState({});
+  const [descargando, setDescargando] = useState(null);
+  const [editandoPrioridad, setEditandoPrioridad] = useState(false);
+  const prioridadTriggerRef = useRef(null);
+  const fotosTecnicasKey = (ticket?.evidencias || []).filter(file => file.evidencia_tecnica && file.tipo_mime?.startsWith('image/')).map(file => file._id).join(',');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const urls = [];
+    let cerrado = false;
+    setVistasPrevias({});
+    for (const file of ticket?.evidencias || []) {
+      if (!file.evidencia_tecnica || !file.tipo_mime?.startsWith('image/')) continue;
+      getEvidenceFile(ticket.id, file._id, { signal: controller.signal }).then(blob => {
+        if (cerrado) return;
+        const url = URL.createObjectURL(blob);
+        urls.push(url);
+        setVistasPrevias(previous => ({ ...previous, [file._id]: url }));
+      }).catch(() => {});
+    }
+    return () => { cerrado = true; controller.abort(); urls.forEach(url => URL.revokeObjectURL(url)); };
+  }, [ticket?.id, fotosTecnicasKey]);
 
   useEffect(() => {
     setTagsTexto((ticket?.tags || []).join(', '));
@@ -22,6 +45,20 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
   const puedeEditarTags = user.rol === 'administrador' || (
     user.rol === 'coordinador' && user.areas_autorizadas?.includes(ticket.asignacion?.area || ticket.categoria)
   );
+
+  const descargarEvidencia = async file => {
+    setDescargando(file._id);
+    try {
+      const blob = await getEvidenceFile(ticket.id, file._id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.nombre_archivo;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { addToast(error.message, 'error'); }
+    finally { setDescargando(null); }
+  };
 
   const handleGuardarTags = async event => {
     event.preventDefault();
@@ -62,7 +99,7 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
   };
 
   return (
-    <div className="modal-backdrop-expediente" onClick={onClose}>
+    <div className="modal-backdrop-expediente" onClick={() => { if (!editandoPrioridad) onClose(); }}>
       <div className="modal-expediente-container" onClick={(e) => e.stopPropagation()}>
         {/* Modal Top Bar */}
         <div className="expediente-topbar">
@@ -75,9 +112,11 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
           </div>
 
           <div className="expediente-top-actions">
-            <span className={`prio-badge prio-${ticket.prioridad}`}>
-              Prioridad {ticket.prioridad.toUpperCase()}
-            </span>
+            {puedeEditarTags ? (
+              <button ref={prioridadTriggerRef} type="button" className={`prio-badge prio-${ticket.prioridad} priority-edit-trigger`} onClick={() => setEditandoPrioridad(true)} aria-haspopup="dialog" title="Cambiar prioridad">
+                Prioridad {ticket.prioridad.toUpperCase()}
+              </button>
+            ) : <span className={`prio-badge prio-${ticket.prioridad}`}>Prioridad {ticket.prioridad.toUpperCase()}</span>}
             <span className={`status-badge status-${ticket.estado}`}>
               {ticket.estado.replace('_', ' ').toUpperCase()}
             </span>
@@ -259,24 +298,29 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
 
             {/* Evidencias Adjuntas */}
             <div className="exp-sidebar-card">
-              <h4>📎 Evidencias fotográficas ({ticket.evidencias?.length || 0})</h4>
+              <h4>📎 Evidencias adjuntas ({ticket.evidencias?.length || 0})</h4>
               {(!ticket.evidencias || ticket.evidencias.length === 0) ? (
                 <div className="no-evidencias-box">
                   <Icon name="folder" size={28} color="#94a3b8" />
-                  <p>No se adjuntaron fotos al crear este ticket.</p>
+                  <p>No hay evidencias adjuntas en esta incidencia.</p>
                 </div>
               ) : (
                 <div className="evidencias-list">
                   {ticket.evidencias.map((ev, i) => (
-                    <div key={ev.id || i} className="evidencia-card-item">
+                    <div key={ev._id || ev.id || i} className="evidencia-card-item">
                       <div className="evidencia-icon">
-                        <img src={ev.url_storage} alt={ev.nombre_archivo || ev.nombre} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6 }} />
+                        {(ev.tipo_mime?.startsWith('image/') && (ev.evidencia_tecnica ? vistasPrevias[ev._id] : ev.url_storage)) ? (
+                          <img src={ev.evidencia_tecnica ? vistasPrevias[ev._id] : ev.url_storage} alt={ev.nombre_archivo || ev.nombre} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6 }} />
+                        ) : <Icon name="file-text" size={28} color="#2563eb" />}
                       </div>
                       <div className="evidencia-meta">
                         <b>{ev.nombre_archivo || ev.nombre}</b>
                         <small>{ev.peso_kb != null ? Math.round(ev.peso_kb) + ' KB' : ev.peso}</small>
+                        {ev.evidencia_tecnica && <small>Adjuntado en la bitácora técnica</small>}
                       </div>
-                      {ev.url_storage?.startsWith('data:image/') && (
+                      {ev.evidencia_tecnica ? (
+                        <button type="button" className="btn-download-ev" disabled={descargando === ev._id} onClick={() => descargarEvidencia(ev)} title={'Descargar ' + ev.nombre_archivo} aria-label={'Descargar ' + ev.nombre_archivo}>{descargando === ev._id ? '…' : '↓'}</button>
+                      ) : ev.url_storage?.startsWith('data:image/') && (
                         <a className="btn-download-ev" href={ev.url_storage} download={ev.nombre_archivo} title="Descargar foto">↓</a>
                       )}
                     </div>
@@ -288,6 +332,7 @@ export default function DetalleTicketModal({ ticket, user, onClose, onActualizar
           </div>
         </div>
       </div>
+      {editandoPrioridad && <PriorityModal ticket={ticket} triggerRef={prioridadTriggerRef} onClose={() => setEditandoPrioridad(false)} onActualizarTicket={onActualizarTicket} addToast={addToast} />}
     </div>
   );
 }

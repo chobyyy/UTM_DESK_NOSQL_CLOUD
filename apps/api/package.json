@@ -10,7 +10,9 @@
     "set:password": "node src/scripts/setPassword.js",
     "migrate:ticket-validator": "node src/scripts/migrateTicketValidator.js",
     "test:mongodb": "node --test src/checks/ticketPersistence.js",
-    "test:tags": "node --test src/checks/tagPersistence.js"
+    "test:tags": "node --test src/checks/tagPersistence.js",
+    "test:assignment": "node --test src/checks/assignmentPersistence.js",
+    "test:evidence": "node --test src/checks/technicalEvidencePersistence.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
