@@ -55,6 +55,23 @@ function App() {
   const [toasts, setToasts] = useState([]);
 
   useEffect(() => {
+    const manejarSuspension = () => {
+      localStorage.removeItem('utm_desk_token');
+      sessionStorage.removeItem('utm_desk_token');
+      localStorage.removeItem('utm_desk_user');
+      sessionStorage.removeItem('utm_desk_user');
+      setUsuarioActual(null);
+      setTickets([]);
+      setUsuarios([]);
+      setTicketParaDetalle(null);
+      setVistaPublica('login');
+      addToast('Tu cuenta está suspendida. Contacta al administrador.', 'error');
+    };
+    window.addEventListener('utm-account-suspended', manejarSuspension);
+    return () => window.removeEventListener('utm-account-suspended', manejarSuspension);
+  }, []);
+
+  useEffect(() => {
     const storage = recordarSesion ? localStorage : sessionStorage;
     const otherStorage = recordarSesion ? sessionStorage : localStorage;
     if (usuarioActual) storage.setItem('utm_desk_user', JSON.stringify(usuarioActual));
@@ -228,6 +245,7 @@ function App() {
                     usuarios={usuarios}
                     cargandoUsuarios={cargandoUsuarios}
                     errorUsuarios={errorUsuarios}
+                    onActualizarUsuario={actualizado => setUsuarios(prev => prev.map(usr => usr.id === actualizado.id ? actualizado : usr))}
                     onVerDetalle={(t) => setTicketParaDetalle(t)}
                     onNavigateAnalitica={() => setVistaAutenticada('analitica')}
                     addToast={addToast}

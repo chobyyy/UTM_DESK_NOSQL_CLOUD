@@ -92,7 +92,7 @@ async function login(req, res, next) {
     if (!user || !user.password_hash) return res.status(401).json({ error: 'Correo o contrasena incorrectos.' });
     const passwordOk = await bcrypt.compare(contrasena, user.password_hash);
     if (!passwordOk) return res.status(401).json({ error: 'Correo o contrasena incorrectos.' });
-    if (!user.activo) return res.status(403).json({ error: 'Tu cuenta se encuentra inactiva. Contacta al administrador.' });
+    if (!user.activo) return res.status(403).json({ error: 'Tu cuenta está suspendida. Contacta al administrador.', code: 'ACCOUNT_SUSPENDED' });
 
     const token = jwt.sign({ sub: user._id.toString(), rol: user.rol }, process.env.JWT_SECRET, { expiresIn: '8h', issuer: 'utm-desk-api', audience: 'utm-desk-web' });
     return res.json({ token, user: publicUser(user) });

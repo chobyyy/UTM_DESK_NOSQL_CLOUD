@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { login, register, createTicket, assignTicket, updateTicketStatus, getEvidenceFile, updateTicketPriority } from './api.js';
+import { login, register, createTicket, assignTicket, updateTicketStatus, getEvidenceFile, updateTicketPriority, updateUserRole, updateUserStatus } from './api.js';
 
 test('API apagada: no genera sesiones ficticias y explica el fallo al guardar', async t => {
   const originalLocal = globalThis.localStorage;
@@ -50,4 +50,31 @@ test('API apagada: no genera sesiones ficticias y explica el fallo al guardar', 
   assert.equal(prioritized.prioridad, 'critica');
   assert.equal(fetchMock.mock.calls.at(-1).arguments[0], '/api/tickets/inc-1/prioridad');
   assert.deepEqual(JSON.parse(fetchMock.mock.calls.at(-1).arguments[1].body), { prioridad: 'critica' });
+  const roleData = { rol: 'coordinador', areas_autorizadas: ['academico'] };
+  fetchMock.mock.mockImplementation(async () => Response.json({ _id: 'user-1', ...roleData }));
+  const updatedUser = await updateUserRole('user-1', roleData);
+  assert.equal(updatedUser.id, 'user-1');
+  assert.equal(updatedUser.rol, 'coordinador');
+  assert.equal(fetchMock.mock.calls.at(-1).arguments[0], '/api/users/user-1/rol');
+  assert.equal(fetchMock.mock.calls.at(-1).arguments[1].method, 'PATCH');
+  assert.deepEqual(JSON.parse(fetchMock.mock.calls.at(-1).arguments[1].body), roleData);
+  fetchMock.mock.mockImplementation(async () => Response.json({ _id: 'user-1', activo: false }));
+  const suspendedUser = await updateUserStatus('user-1', false);
+  assert.equal(suspendedUser.id, 'user-1');
+  assert.equal(suspendedUser.activo, false);
+  assert.equal(fetchMock.mock.calls.at(-1).arguments[0], '/api/users/user-1/estado');
+  assert.deepEqual(JSON.parse(fetchMock.mock.calls.at(-1).arguments[1].body), { activo: false });
+  const originalWindow = globalThis.window;
+  globalThis.window = new EventTarget();
+  t.after(() => { if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow; });
+  let expulsions = 0;
+  globalThis.window.addEventListener('utm-account-suspended', () => expulsions++);
+  fetchMock.mock.mockImplementation(async () => Response.json({ error: 'Cuenta suspendida', code: 'ACCOUNT_SUSPENDED' }, { status: 401 }));
+  await assert.rejects(createTicket({}), /Cuenta suspendida/);
+  assert.equal(expulsions, 1);
+  await assert.rejects(getEvidenceFile('inc-1', 'ev-1'), /Cuenta suspendida/);
+  assert.equal(expulsions, 2);
+  fetchMock.mock.mockImplementation(async () => Response.json({ error: 'Token vencido' }, { status: 401 }));
+  await assert.rejects(createTicket({}), /Token vencido/);
+  assert.equal(expulsions, 2, 'Solo una suspensión informa ese motivo');
 });

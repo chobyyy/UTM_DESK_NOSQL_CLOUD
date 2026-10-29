@@ -59,16 +59,6 @@ export default function PortalHeader({
             <span>Analítica Campus</span>
           </button>
 
-          {/* Menú de administración si es admin */}
-          {user.rol === 'administrador' && (
-            <button
-              className={`portal-nav-link ${vistaActual === 'admin' ? 'active' : ''}`}
-              onClick={() => onCambiarVista('dashboard')}
-            >
-              <Icon name="shield" size={16} />
-              <span>Consola Admin</span>
-            </button>
-          )}
         </nav>
       </div>
 

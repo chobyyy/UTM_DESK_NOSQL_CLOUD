@@ -6,6 +6,12 @@ function token() {
   return localStorage.getItem('utm_desk_token') || sessionStorage.getItem('utm_desk_token');
 }
 
+function comprobarSuspension(response, body, authToken) {
+  if (response.status === 401 && body.code === 'ACCOUNT_SUSPENDED' && authToken && authToken === token() && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('utm-account-suspended'));
+  }
+}
+
 async function request(path, options = {}) {
   const authToken = token();
   if (!path.startsWith('/auth/') && authToken?.startsWith('mock-token-')) {
@@ -22,6 +28,7 @@ async function request(path, options = {}) {
   }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    comprobarSuspension(response, body, authToken);
     if (body.error) {
       const details = Array.isArray(body.details) ? body.details : typeof body.details === 'string' ? [body.details] : [];
       throw new Error([body.error, ...details].join('. '));
@@ -103,6 +110,7 @@ export async function getEvidenceFile(ticketId, evidenceId, { signal } = {}) {
   }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
+    comprobarSuspension(response, body, authToken);
     throw new Error(body.error || 'No fue posible descargar la evidencia.');
   }
   return response.blob();
@@ -118,6 +126,16 @@ export async function listTechnicians() {
 
 export async function listUsers() {
   return (await request('/users')).map((user) => ({ ...user, id: user._id }));
+}
+
+export async function updateUserRole(id, data) {
+  const user = await request(`/users/${id}/rol`, { method: 'PATCH', body: JSON.stringify(data) });
+  return { ...user, id: user._id };
+}
+
+export async function updateUserStatus(id, activo) {
+  const user = await request(`/users/${id}/estado`, { method: 'PATCH', body: JSON.stringify({ activo }) });
+  return { ...user, id: user._id };
 }
 
 export async function updateTicketTags(id, tags) {

@@ -12,7 +12,8 @@
     "test:mongodb": "node --test src/checks/ticketPersistence.js",
     "test:tags": "node --test src/checks/tagPersistence.js",
     "test:assignment": "node --test src/checks/assignmentPersistence.js",
-    "test:evidence": "node --test src/checks/technicalEvidencePersistence.js"
+    "test:evidence": "node --test src/checks/technicalEvidencePersistence.js",
+    "test:roles": "node --test src/checks/userRolePersistence.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

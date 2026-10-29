@@ -7,7 +7,8 @@ async function requireAuth(req, res, next) {
     if (!token) return res.status(401).json({ error: 'Se requiere autenticación' });
     const payload = jwt.verify(token, process.env.JWT_SECRET, { issuer: 'utm-desk-api', audience: 'utm-desk-web' });
     const user = await User.findById(payload.sub);
-    if (!user || !user.activo) return res.status(401).json({ error: 'Cuenta no disponible' });
+    if (!user) return res.status(401).json({ error: 'Cuenta no disponible' });
+    if (!user.activo) return res.status(401).json({ error: 'Tu cuenta está suspendida. Contacta al administrador.', code: 'ACCOUNT_SUSPENDED' });
     req.user = user;
     next();
   } catch {

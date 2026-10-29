@@ -1,6 +1,27 @@
 import React, { useState } from 'react';
 import Icon from './Icons';
+import UserRoleModal from './UserRoleModal';
+import UserStatusModal from './UserStatusModal';
 import { CATEGORIAS_CONFIG, EDIFICIOS_UTM } from '../mockData';
+
+const ROLES_TEXTO = {
+  reportante: 'Reportante',
+  tecnico: 'Técnico',
+  coordinador: 'Coordinador',
+  administrador: 'Administrador'
+};
+
+const TIPOS_REPORTANTE_TEXTO = {
+  alumno: 'Alumno',
+  docente: 'Docente',
+  administrativo: 'Administrativo'
+};
+
+const PRIORIDADES_TEXTO = { baja: 'BAJA', media: 'MEDIA', alta: 'ALTA', critica: 'CRÍTICA' };
+
+function areasTexto(areas = []) {
+  return areas.map((area) => CATEGORIAS_CONFIG[area]?.nombre || area).join(', ') || 'Ninguna';
+}
 
 export default function DashboardAdmin({
   user,
@@ -8,6 +29,7 @@ export default function DashboardAdmin({
   usuarios,
   cargandoUsuarios,
   errorUsuarios,
+  onActualizarUsuario,
   onVerDetalle,
   onNavigateAnalitica,
   addToast
@@ -16,6 +38,8 @@ export default function DashboardAdmin({
   const [busqueda, setBusqueda] = useState('');
   const [filtroArea, setFiltroArea] = useState('todas');
   const [usuarioDetalle, setUsuarioDetalle] = useState(null);
+  const [usuarioParaRol, setUsuarioParaRol] = useState(null);
+  const [usuarioParaEstado, setUsuarioParaEstado] = useState(null);
 
   // Filtros del directorio de usuarios
   const [busquedaUsuarios, setBusquedaUsuarios] = useState('');
@@ -77,23 +101,23 @@ export default function DashboardAdmin({
         <div className="dash-welcome-info">
           <div className="badge-user-role">
             <Icon name="shield" size={13} />
-            <span>Consola de Administraci��n Central �� DTI Campus UTM</span>
+            <span>Consola de Administración Central · DTI Campus UTM</span>
           </div>
-          <h2>Control Maestro: {user.nombre} �s�</h2>
+          <h2>Control Maestro: {user.nombre}</h2>
           <p>
-            Visi��n global del ecosistema de soporte, catǭlogo de ǭreas, control de permisos RBAC para usuarios,
+            Visión global del ecosistema de soporte, catálogo de áreas, control de permisos RBAC para usuarios,
             salud de la base documental MongoDB Atlas y reportes institucionales.
           </p>
         </div>
         <div className="dash-welcome-action">
           <button className="btn-analytics-dash" onClick={onNavigateAnalitica}>
             <Icon name="bar-chart" size={17} />
-            <span>Ver Anal��tica Global</span>
+            <span>Ver Analítica Global</span>
           </button>
         </div>
       </div>
 
-      {/* MǸtricas Globales del Campus */}
+      {/* Métricas Globales del Campus */}
       <div className="kpi-grid-4">
         <div className="kpi-card">
           <div className="kpi-icon kpi-blue">
@@ -111,9 +135,9 @@ export default function DashboardAdmin({
             <Icon name="alert-triangle" size={20} />
           </div>
           <div className="kpi-body">
-            <span className="kpi-title">Abiertas y En Proceso</span>
+            <span className="kpi-title">Abiertas y en Proceso</span>
             <b className="kpi-number">{abiertas + enProceso}</b>
-            <small className="kpi-sub">{criticas} de prioridad cr��tica �� {enEspera} en espera</small>
+            <small className="kpi-sub">{criticas} de prioridad crítica · {enEspera} en espera</small>
           </div>
         </div>
 
@@ -122,7 +146,7 @@ export default function DashboardAdmin({
             <Icon name="check-circle" size={20} />
           </div>
           <div className="kpi-body">
-            <span className="kpi-title">Tasa de Resoluci��n</span>
+            <span className="kpi-title">Tasa de Resolución</span>
             <b className="kpi-number">{porcentajeResolucion}</b>
             <small className="kpi-sub">{resueltasCerradas} casos resueltos/cerrados</small>
           </div>
@@ -172,25 +196,25 @@ export default function DashboardAdmin({
         <div className="dash-card-header">
           <div>
             <h3>Incidencias por Prioridad</h3>
-            <p className="dash-card-subtitle">Distribuci��n de prioridades en MongoDB.</p>
+            <p className="dash-card-subtitle">Distribución de prioridades en MongoDB.</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', padding: '8px 4px' }}>
           <span className="prio-badge prio-baja">BAJA: {porPrioridad.baja}</span>
           <span className="prio-badge prio-media">MEDIA: {porPrioridad.media}</span>
           <span className="prio-badge prio-alta">ALTA: {porPrioridad.alta}</span>
-          <span className="prio-badge prio-critica">CR�?TICA: {porPrioridad.critica}</span>
+          <span className="prio-badge prio-critica">CRÍTICA: {porPrioridad.critica}</span>
         </div>
       </div>
 
-      {/* Pesta��as de la Consola Admin */}
+      {/* Pestañas de la Consola Admin */}
       <div className="admin-tabs-nav">
         <button
           className={`admin-tab-btn ${tabAdmin === 'tickets' ? 'active' : ''}`}
           onClick={() => setTabAdmin('tickets')}
         >
           <Icon name="ticket" size={16} />
-          <span>Supervisi��n de Todas las Incidencias ({tickets.length})</span>
+          <span>Supervisión de Todas las Incidencias ({tickets.length})</span>
         </button>
         <button
           className={`admin-tab-btn ${tabAdmin === 'usuarios' ? 'active' : ''}`}
@@ -204,18 +228,18 @@ export default function DashboardAdmin({
           onClick={() => setTabAdmin('areas')}
         >
           <Icon name="building" size={16} />
-          <span>Catǭlogo de �?reas y Edificios UTM</span>
+          <span>Catálogo de Áreas y Edificios UTM</span>
         </button>
       </div>
 
-      {/* Contenido Pesta��a 1: Tickets Totales */}
+      {/* Contenido Pestaña 1: Tickets Totales */}
       {tabAdmin === 'tickets' && (
         <div className="dash-content-card">
           <div className="dash-card-header">
             <div>
-              <h3>Inventario Campus de Incidencias</h3>
+              <h3>Inventario de Incidencias del Campus</h3>
               <p className="dash-card-subtitle">
-                Supervisi��n administrativa de todos los departamentos universitarios.
+                Supervisión administrativa de todos los departamentos universitarios.
               </p>
             </div>
 
@@ -224,7 +248,7 @@ export default function DashboardAdmin({
                 <Icon name="search" size={16} />
                 <input
                   type="text"
-                  placeholder="Buscar por c��digo, alumno, edificio..."
+                  placeholder="Buscar por código, reportante, edificio..."
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
                 />
@@ -235,10 +259,10 @@ export default function DashboardAdmin({
                 onChange={(e) => setFiltroArea(e.target.value)}
                 className="select-custom"
               >
-                <option value="todas">�YO? Todas las �?reas</option>
-                <option value="computo_redes">�Y'� C��mputo y Telecomunicaciones</option>
-                <option value="infraestructura">�Y?-��? Infraestructura y Mantenimiento</option>
-                <option value="academico">�Y"s Sistemas y Servicios AcadǸmicos</option>
+                <option value="todas">Todas las áreas</option>
+                {Object.values(CATEGORIAS_CONFIG).map((area) => (
+                  <option key={area.id} value={area.id}>{area.emoji} {area.nombre}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -247,15 +271,15 @@ export default function DashboardAdmin({
             <table className="custom-table">
               <thead>
                 <tr>
-                  <th>C��digo</th>
+                  <th>Código</th>
                   <th>Incidencia</th>
-                  <th>�?rea</th>
+                  <th>Área</th>
                   <th>Prioridad</th>
                   <th>Estado</th>
                   <th>Reportante</th>
-                  <th>TǸcnico Asignado</th>
-                  <th>Ubicaci��n</th>
-                  <th style={{ textAlign: 'right' }}>Acci��n</th>
+                  <th>Técnico Asignado</th>
+                  <th>Ubicación</th>
+                  <th style={{ textAlign: 'right' }}>Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -266,10 +290,10 @@ export default function DashboardAdmin({
                     <td>
                       <small className="area-text-tag">{CATEGORIAS_CONFIG[t.categoria]?.emoji} {CATEGORIAS_CONFIG[t.categoria]?.nombre.split(' ')[0]}</small>
                     </td>
-                    <td><span className={`prio-badge prio-${t.prioridad}`}>{t.prioridad.toUpperCase()}</span></td>
+                    <td><span className={`prio-badge prio-${t.prioridad}`}>{PRIORIDADES_TEXTO[t.prioridad] || t.prioridad.toUpperCase()}</span></td>
                     <td><span className={`status-badge status-${t.estado}`}>{t.estado.replace('_', ' ').toUpperCase()}</span></td>
                     <td><small>{t.reportante.nombre}</small></td>
-                    <td><small>{t.asignacion.tecnicoNombre || '�?"'}</small></td>
+                    <td><small>{t.asignacion.tecnicoNombre || 'Sin asignar'}</small></td>
                     <td><small>{t.ubicacion.edificio}</small></td>
                     <td style={{ textAlign: 'right' }}>
                       <button
@@ -290,19 +314,19 @@ export default function DashboardAdmin({
         </div>
       )}
 
-      {/* Contenido Pesta��a 2: Directorio de Usuarios (solo lectura) */}
+      {/* Contenido Pestaña 2: Directorio y administración de roles */}
       {tabAdmin === 'usuarios' && (
         <div className="dash-content-card">
           <div className="dash-card-header">
             <div>
-              <h3>Directorio de Usuarios Institucionales (solo lectura)</h3>
+              <h3>Directorio de Usuarios Institucionales</h3>
               <p className="dash-card-subtitle">
-                Consulta de usuarios reales almacenados en MongoDB Atlas. No se modifican roles ni registros.
+                Consulta usuarios, administra sus roles y áreas autorizadas, y suspende o reactiva cuentas.
               </p>
             </div>
           </div>
 
-          {/* Filtros y bǧsqueda */}
+          {/* Filtros y búsqueda */}
           <div className="dash-filters-row" style={{ marginBottom: '12px' }}>
             <div className="dash-search-input">
               <Icon name="search" size={16} />
@@ -321,7 +345,7 @@ export default function DashboardAdmin({
             >
               <option value="todos">Todos los roles</option>
               <option value="reportante">Reportante</option>
-              <option value="tecnico">TǸcnico</option>
+              <option value="tecnico">Técnico</option>
               <option value="coordinador">Coordinador</option>
               <option value="administrador">Administrador</option>
             </select>
@@ -331,10 +355,10 @@ export default function DashboardAdmin({
               onChange={(e) => setFiltroAreaUsuario(e.target.value)}
               className="select-custom"
             >
-              <option value="todas">Todas las �?reas</option>
-              <option value="computo_redes">C��mputo y Telecomunicaciones</option>
-              <option value="infraestructura">Infraestructura y Mantenimiento</option>
-              <option value="academico">Sistemas y Servicios AcadǸmicos</option>
+              <option value="todas">Todas las áreas</option>
+              {Object.values(CATEGORIAS_CONFIG).map((area) => (
+                <option key={area.id} value={area.id}>{area.nombre}</option>
+              ))}
             </select>
 
             <select
@@ -344,7 +368,7 @@ export default function DashboardAdmin({
             >
               <option value="todos">Todos los estados</option>
               <option value="activo">Activos</option>
-              <option value="inactivo">Inactivos</option>
+              <option value="inactivo">Suspendidos</option>
             </select>
           </div>
 
@@ -367,11 +391,11 @@ export default function DashboardAdmin({
               <thead>
                 <tr>
                   <th>Usuario</th>
-                  <th>Correo Institucional</th>
+                  <th>Correo Electrónico</th>
                   <th>Rol</th>
-                  <th>�?reas Autorizadas</th>
+                  <th>Áreas Autorizadas</th>
                   <th>Estado</th>
-                  <th style={{ textAlign: 'right' }}>Detalle</th>
+                  <th style={{ textAlign: 'right' }}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -382,9 +406,11 @@ export default function DashboardAdmin({
                         <span className="member-avatar">
                           {(usr.nombre || '').split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()}
                         </span>
-                        <div>
+                        <div className="admin-user-name">
                           <b>{usr.nombre}</b>
-                          {usr.tipo_reportante && <small>{usr.tipo_reportante}</small>}
+                          {usr.rol === 'reportante' && usr.tipo_reportante && (
+                            <small>{TIPOS_REPORTANTE_TEXTO[usr.tipo_reportante] || usr.tipo_reportante}</small>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -393,26 +419,36 @@ export default function DashboardAdmin({
                     </td>
                     <td>
                       <span className={`role-badge role-${usr.rol}`}>
-                        {usr.rol.toUpperCase()}
+                        {(ROLES_TEXTO[usr.rol] || usr.rol).toUpperCase()}
                       </span>
                     </td>
                     <td>
-                      <small>{(usr.areas_autorizadas || []).join(', ') || '�?"'}</small>
+                      <small className="admin-user-areas">{areasTexto(usr.areas_autorizadas)}</small>
                     </td>
                     <td>
                       <span className={`status-dot-text ${usr.activo ? 'active-user' : 'inactive-user'}`}>
                         <span className="dot-circle"></span>
-                        {usr.activo ? 'Activo' : 'Inactivo'}
+                        {usr.activo ? 'Activo' : 'Suspendido'}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        className="btn-table-action"
-                        onClick={() => setUsuarioDetalle(usr)}
-                        title="Ver detalle"
-                      >
-                        <Icon name="eye" size={15} />
-                      </button>
+                      <div className="user-action-btns">
+                        <button
+                          className="btn-table-action"
+                          onClick={() => setUsuarioDetalle(usr)}
+                          title="Ver detalle"
+                        >
+                          <Icon name="eye" size={15} />
+                        </button>
+                        {usr.rol !== 'administrador' && (
+                          <button className="btn-table-action" onClick={() => setUsuarioParaRol(usr)} title={`Cambiar rol de ${usr.nombre}`}>Cambiar rol</button>
+                        )}
+                        {(usr.id || usr._id) !== (user.id || user._id) && (
+                          <button className={`btn-toggle-active ${usr.activo ? 'btn-deactivate' : 'btn-activate'}`} onClick={() => setUsuarioParaEstado(usr)} title={`${usr.activo ? 'Suspender' : 'Reactivar'} cuenta de ${usr.nombre}`}>
+                            {usr.activo ? 'Suspender' : 'Reactivar'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -422,14 +458,14 @@ export default function DashboardAdmin({
         </div>
       )}
 
-      {/* Contenido Pesta��a 3: Catǭlogo de �?reas y Edificios */}
+      {/* Contenido Pestaña 3: Catálogo de Áreas y Edificios */}
       {tabAdmin === 'areas' && (
         <div className="admin-catalog-grid">
           <div className="dash-content-card">
             <div className="dash-card-header">
               <div>
-                <h3>�?reas de Atenci��n Institucional</h3>
-                <p className="dash-card-subtitle">Estructura temǭtica y coordinaciones responsables.</p>
+                <h3>Áreas de Atención Institucional</h3>
+                <p className="dash-card-subtitle">Estructura temática y coordinaciones responsables.</p>
               </div>
             </div>
             <div className="catalog-areas-list">
@@ -451,8 +487,8 @@ export default function DashboardAdmin({
           <div className="dash-content-card">
             <div className="dash-card-header">
               <div>
-                <h3>Catǭlogo de Edificios Campus UTM</h3>
-                <p className="dash-card-subtitle">Espacios geogrǭficos monitoreados en la base de datos.</p>
+                <h3>Catálogo de Edificios del Campus UTM</h3>
+                <p className="dash-card-subtitle">Espacios geográficos monitoreados en la base de datos.</p>
               </div>
             </div>
             <ul className="edificios-catalog-list">
@@ -468,7 +504,7 @@ export default function DashboardAdmin({
         </div>
       )}
 
-      {/* Modal de detalle de usuario (solo lectura) */}
+      {/* Modal de detalle de usuario */}
       {usuarioDetalle && (
         <div className="modal-backdrop-expediente" onClick={() => setUsuarioDetalle(null)}>
           <div className="modal-expediente-container" onClick={(e) => e.stopPropagation()}>
@@ -477,21 +513,45 @@ export default function DashboardAdmin({
                 <span className="font-mono-tag">{usuarioDetalle._id}</span>
               </div>
               <div className="expediente-top-actions">
-                <button className="btn-close-circle" onClick={() => setUsuarioDetalle(null)} title="Cerrar">�o</button>
+                <button className="btn-close-circle" onClick={() => setUsuarioDetalle(null)} title="Cerrar" aria-label="Cerrar detalle de usuario">
+                  <span aria-hidden="true">✕</span>
+                </button>
               </div>
             </div>
             <div style={{ padding: '16px' }}>
               <p><b>Nombre:</b> {usuarioDetalle.nombre}</p>
               <p><b>Correo:</b> {usuarioDetalle.correo}</p>
-              <p><b>Rol:</b> {usuarioDetalle.rol}</p>
-              <p><b>�?reas autorizadas:</b> {(usuarioDetalle.areas_autorizadas || []).join(', ') || 'Ninguna'}</p>
-              <p><b>Estado:</b> {usuarioDetalle.activo ? 'Activo' : 'Inactivo'}</p>
-              {usuarioDetalle.tipo_reportante && (
-                <p><b>Tipo de reportante:</b> {usuarioDetalle.tipo_reportante}</p>
+              <p><b>Rol:</b> {ROLES_TEXTO[usuarioDetalle.rol] || usuarioDetalle.rol}</p>
+              <p><b>Áreas autorizadas:</b> {areasTexto(usuarioDetalle.areas_autorizadas)}</p>
+              <p><b>Estado:</b> {usuarioDetalle.activo ? 'Activo' : 'Suspendido'}</p>
+              {usuarioDetalle.rol === 'reportante' && usuarioDetalle.tipo_reportante && (
+                <p><b>Tipo de reportante:</b> {TIPOS_REPORTANTE_TEXTO[usuarioDetalle.tipo_reportante] || usuarioDetalle.tipo_reportante}</p>
               )}
             </div>
           </div>
         </div>
+      )}
+      {usuarioParaRol && (
+        <UserRoleModal
+          usuario={usuarioParaRol}
+          onClose={() => setUsuarioParaRol(null)}
+          onActualizarUsuario={actualizado => {
+            onActualizarUsuario(actualizado);
+            if (usuarioDetalle?.id === actualizado.id) setUsuarioDetalle(actualizado);
+          }}
+          addToast={addToast}
+        />
+      )}
+      {usuarioParaEstado && (
+        <UserStatusModal
+          usuario={usuarioParaEstado}
+          onClose={() => setUsuarioParaEstado(null)}
+          onActualizarUsuario={actualizado => {
+            onActualizarUsuario(actualizado);
+            if (usuarioDetalle?.id === actualizado.id) setUsuarioDetalle(actualizado);
+          }}
+          addToast={addToast}
+        />
       )}
     </div>
   );

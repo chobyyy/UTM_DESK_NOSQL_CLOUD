@@ -13,7 +13,7 @@ export default function AnaliticaView({ tickets, onVolver }) {
   const resueltas = tickets.filter((t) => t.estado === 'resuelta' || t.estado === 'cerrada').length;
 
   const tituloCounts = tickets.reduce((acc, t) => {
-    const titulo = t.titulo || 'Sin titulo';
+    const titulo = t.titulo || 'Sin título';
     acc[titulo] = (acc[titulo] || 0) + 1;
     return acc;
   }, {});

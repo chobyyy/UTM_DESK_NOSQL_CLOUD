@@ -3210,6 +3210,24 @@ a {
   gap: 10px;
 }
 
+.admin-user-name {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.admin-user-name small {
+  color: var(--text-muted);
+}
+
+.admin-user-areas {
+  display: block;
+  min-width: 160px;
+  max-width: 280px;
+  white-space: normal;
+  line-height: 1.5;
+}
+
 .status-dot-text {
   display: flex;
   align-items: center;
@@ -3232,6 +3250,7 @@ a {
 
 .user-action-btns {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
@@ -3263,7 +3282,63 @@ a {
   color: #15803d;
 }
 
-/* Catálogo Areas */
+/* Edición de roles */
+.modal-backdrop.admin-role-backdrop {
+  z-index: 1100;
+}
+
+.modal-box.admin-role-modal {
+  width: min(100%, 520px);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.admin-role-modal button:disabled {
+  opacity: .65;
+  cursor: default;
+}
+
+.admin-role-areas {
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+
+.admin-role-areas legend {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 5px;
+}
+
+.admin-role-areas label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.admin-role-help {
+  margin-top: 16px;
+}
+
+.admin-role-modal .modal-actions {
+  flex-wrap: wrap;
+}
+
+.admin-status-description {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.btn-primary.admin-suspend-confirm {
+  background: #dc2626;
+}
+
+/* Catálogo de áreas */
 .admin-catalog-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
